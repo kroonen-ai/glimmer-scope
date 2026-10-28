@@ -194,3 +194,83 @@ def steer(run: str, latent: int, prompt: str = "Describe your ideal weekend.", s
         with glimmer.steering(model, sae.cfg.layer, vector):
             out = model.generate(**inputs, max_new_tokens=200, do_sample=False)
         print(f"--- latent {latent} x{s} (peak {peak:.2f})\n{tokenizer.decode(out[0, inputs.input_ids.shape[1]:])}\n")
+
+
+meta_secret = modal.Secret.from_name("meta")
+
+
+@app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=8 * 3600)
+def label(run: str, limit: int = 20000, workers: int = 16):
+    """Muse Spark names the catalog's features; resumes where it stopped."""
+    import json
+
+    from scope.label import label_catalog
+
+    base = f"{OUTPUT_DIR}/{run}"
+    out = f"{base}/labels.jsonl"
+    done = set()
+    if os.path.exists(out):
+        done = {json.loads(line)["latent"] for line in open(out)}
+    written = label_catalog(f"{base}/catalog.jsonl.gz", out, limit, workers=workers, done=done)
+    scope_volume.commit()
+    print(f"labeled {written} now, {len(done) + written} in total")
+
+
+@app.function(volumes=VOLUMES, secrets=[meta_secret], gpu=GPU, timeout=12 * 3600)
+def sweep(
+    run: str,
+    n_features: int = 1000,
+    min_steer: int = 2,
+    kinds: str = "concept,unclear",
+    strengths: str = "0.2,0.35,0.5,0.7",
+    checkpoint: str = "final",
+):
+    """Steer with the most promising labeled features and have Muse Spark score them."""
+    import gzip
+    import json
+
+    from scope import model as glimmer
+    from scope.sae import TopKSAE
+    from scope.steerability import contexts_for, sweep as run_sweep
+
+    base = f"{OUTPUT_DIR}/{run}"
+    out = f"{base}/steerability.jsonl"
+    scored = set()
+    if os.path.exists(out):
+        scored = {json.loads(line)["latent"] for line in open(out)}
+    wanted = set(kinds.split(","))
+    labels = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
+    features = [
+        f for f in labels if f["kind"] in wanted and f["steer"] >= min_steer and f["latent"] not in scored
+    ]
+    features.sort(key=lambda f: (-f["steer"], f["freq"]))
+    features = features[:n_features]
+    picked = {f["latent"] for f in features}
+    contexts = {}
+    with gzip.open(f"{base}/catalog.jsonl.gz", "rt") as f:
+        for line in f:
+            row = json.loads(line)
+            if row["latent"] in picked:
+                contexts[row["latent"]] = contexts_for(row)
+    print(f"sweeping {len(features)} features", flush=True)
+    model, tokenizer = glimmer.load()
+    sae = TopKSAE.load(f"{base}/{checkpoint}", device="cuda")
+    written = run_sweep(
+        model, tokenizer, sae, features, contexts, out, strengths=tuple(float(s) for s in strengths.split(","))
+    )
+    scope_volume.commit()
+    print(f"scored {written}")
+
+
+@app.function(volumes=VOLUMES)
+def top(run: str, n: int = 40, min_fluency: int = 2):
+    """The best-steering features found so far."""
+    import json
+
+    rows = [json.loads(line) for line in open(f"{OUTPUT_DIR}/{run}/steerability.jsonl")]
+    rows.sort(key=lambda r: -r["score"])
+    print(f"{len(rows)} features scored; top {n}:")
+    for r in rows[:n]:
+        sample = r["samples"].get(str(r["best_strength"]), [""])[0] if r["best_strength"] is not None else ""
+        print(f"{r['latent']:>6}  {r['score']:.2f}  x{r['best_strength']}  {r['label']}  ->  {r['observed']}")
+        print(f"        {' '.join(sample.split())[:160]}")
