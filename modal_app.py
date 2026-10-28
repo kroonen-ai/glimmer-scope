@@ -457,7 +457,7 @@ def archetype(
 @app.local_entrypoint()
 def archetypes(run: str = "layer24-64k-k64", names: str = "all", skip_done: bool = True):
     """Run many archetypes from one app (five GPUs at a time), and print each summary as it lands."""
-    from scope.archetype import ARCHETYPES, slug
+    from scope.personas import ARCHETYPES, slug
 
     chosen = list(ARCHETYPES) if names == "all" else [n.strip() for n in names.split(",")]
     if skip_done:
