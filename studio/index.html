@@ -282,9 +282,9 @@ async function stream(messages, steering, onDelta) {
   return { content, reasoning, timings };
 }
 
-function replyBlock(container, mix) {
+function replyBlock(container, mix, note = "") {
   const el = document.createElement("div");
-  el.innerHTML = `<div class="chips">${chipsFor(mix)}</div><div class="think" hidden></div><div class="body"></div><div class="stats"></div>`;
+  el.innerHTML = `<div class="chips">${chipsFor(mix)}${note ? `<span class="chip plain" title="Earlier turns in this column are the steered replies, so the persona can carry over through context">${escapeHtml(note)}</span>` : ""}</div><div class="think" hidden></div><div class="body"></div><div class="stats"></div>`;
   container.appendChild(el);
   return {
     update(content, reasoning) {
@@ -324,6 +324,13 @@ async function send(text) {
   log.appendChild(m);
   scrollDown();
 
+  // Plain Glimmer keeps its own branch of the conversation, so its column never reads the
+  // steered replies. A branch opened mid-chat starts from the turns so far, and says so.
+  if (compare && !state.plain) {
+    state.plain = { history: state.history.slice(0, -1), shared: state.history.length > 1 };
+  } else if (!compare) {
+    state.plain = null;
+  }
   const messages = state.history.slice();
   const steered = replyBlock(holder, mix);
   try {
@@ -336,8 +343,17 @@ async function send(text) {
     state.history.pop();
   }
   if (compare) {
-    const plain = replyBlock(holder, {});
-    try { plain.done((await stream(messages, {}, plain.update)).timings); } catch (e) { plain.fail(e); }
+    const branch = state.plain;
+    branch.history.push({ role: "user", content: text });
+    const plain = replyBlock(holder, {}, branch.shared ? "shares earlier turns" : "");
+    try {
+      const r = await stream(branch.history.slice(), {}, plain.update);
+      plain.done(r.timings);
+      branch.history.push({ role: "assistant", content: r.content });
+    } catch (e) {
+      plain.fail(e);
+      branch.history.pop();
+    }
   }
   state.busy = false;
   $("send").disabled = false;
@@ -359,6 +375,7 @@ $("input").addEventListener("input", (e) => { e.target.style.height = ""; e.targ
 $("clear").addEventListener("click", () => { state.mix = {}; renderVectors(); });
 $("reset").addEventListener("click", () => {
   state.history = [];
+  state.plain = null;
   $("log").innerHTML = `<div class="empty" id="empty">New chat. The dials stay where they are.</div>`;
 });
 // Tested mixes from presets.json next to this page; a preset replaces the current dials.
