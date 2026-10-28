@@ -228,6 +228,7 @@ def sweep(
     """Steer with the most promising labeled features and have Muse Spark score them."""
     import gzip
     import json
+    import random
 
     from scope import model as glimmer
     from scope.sae import TopKSAE
@@ -243,7 +244,9 @@ def sweep(
     features = [
         f for f in labels if f["kind"] in wanted and f["steer"] >= min_steer and f["latent"] not in scored
     ]
-    features.sort(key=lambda f: (-f["steer"], f["freq"]))
+    # A seeded shuffle, then by guessed steerability, so the sample spans every firing rate.
+    random.Random(0).shuffle(features)
+    features.sort(key=lambda f: -f["steer"])
     features = features[:n_features]
     picked = {f["latent"] for f in features}
     contexts = {}
