@@ -224,26 +224,42 @@ def sweep(
     kinds: str = "concept,unclear",
     strengths: str = "0.2,0.35,0.5,0.7",
     checkpoint: str = "final",
+    candidates: str = "labels",
+    prompt_set: str = "everyday",
 ):
-    """Steer with the most promising labeled features and have Muse Spark score them."""
+    """Steer with the most promising labeled features and have Muse Spark score them.
+
+    ``candidates="personas"`` sweeps the features ``persona_scan`` flagged instead, judged on
+    ``prompt_set`` prompts from scope.archetype.EVAL_SETS (``social`` suits them) into
+    steerability-personas.jsonl.
+    """
     import gzip
     import json
     import random
 
     from scope import model as glimmer
+    from scope.archetype import EVAL_SETS
     from scope.sae import TopKSAE
     from scope.steerability import contexts_for, sweep as run_sweep
 
     base = f"{OUTPUT_DIR}/{run}"
-    out = f"{base}/steerability.jsonl"
+    out = f"{base}/steerability.jsonl" if candidates == "labels" else f"{base}/steerability-{candidates}.jsonl"
     scored = set()
     if os.path.exists(out):
         scored = {json.loads(line)["latent"] for line in open(out)}
-    wanted = set(kinds.split(","))
-    labels = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
-    features = [
-        f for f in labels if f["kind"] in wanted and f["steer"] >= min_steer and f["latent"] not in scored
-    ]
+    if candidates == "labels":
+        wanted = set(kinds.split(","))
+        labels = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
+        features = [
+            f for f in labels if f["kind"] in wanted and f["steer"] >= min_steer and f["latent"] not in scored
+        ]
+    else:
+        rows = [json.loads(line) for line in open(f"{base}/{candidates}.jsonl")]
+        features = [
+            {**r, "label": f"{r['label']} (could act as: {r['persona']})" if r.get("persona") else r["label"]}
+            for r in rows
+            if r["latent"] not in scored
+        ]
     # A seeded shuffle, then by guessed steerability, so the sample spans every firing rate.
     random.Random(0).shuffle(features)
     features.sort(key=lambda f: -f["steer"])
@@ -259,18 +275,19 @@ def sweep(
     model, tokenizer = glimmer.load()
     sae = TopKSAE.load(f"{base}/{checkpoint}", device="cuda")
     written = run_sweep(
-        model, tokenizer, sae, features, contexts, out, strengths=tuple(float(s) for s in strengths.split(","))
+        model, tokenizer, sae, features, contexts, out, strengths=tuple(float(s) for s in strengths.split(",")),
+        prompts=EVAL_SETS[prompt_set],
     )
     scope_volume.commit()
     print(f"scored {written}")
 
 
 @app.function(volumes=VOLUMES)
-def top(run: str, n: int = 40, min_fluency: int = 2):
+def top(run: str, n: int = 40, min_fluency: int = 2, file: str = "steerability.jsonl"):
     """The best-steering features found so far."""
     import json
 
-    rows = [json.loads(line) for line in open(f"{OUTPUT_DIR}/{run}/steerability.jsonl")]
+    rows = [json.loads(line) for line in open(f"{OUTPUT_DIR}/{run}/{file}")]
     rows.sort(key=lambda r: -r["score"])
     print(f"{len(rows)} features scored; top {n}:")
     for r in rows[:n]:
@@ -279,11 +296,10 @@ def top(run: str, n: int = 40, min_fluency: int = 2):
         print(f"        {' '.join(sample.split())[:160]}")
 
 
-@app.function(volumes=VOLUMES, secrets=[meta_secret], gpu=GPU, timeout=4 * 3600)
+@app.function(volumes=VOLUMES, secrets=[meta_secret], gpu=GPU, timeout=4 * 3600, max_containers=5)
 def archetype(
     run: str,
     name: str,
-    description: str = "",
     n_pairs: int = 24,
     top: int = 10,
     strengths: str = "0.2,0.35,0.5,0.7",
@@ -300,39 +316,81 @@ def archetype(
     from scope import model as glimmer
     from scope.archetype import (
         ARCHETYPES,
+        EVAL_SETS,
+        PROMPT_SETS,
         answer_activations,
         blend_direction,
-        make_pairs,
+        detector_accuracy,
+        everyday_pairs,
+        glimmer_pairs,
         mean_difference_direction,
         rank_features,
         slug,
+        spark_pairs,
+        split_pairs,
     )
     from scope.sae import TopKSAE
     from scope.steerability import contexts_for, sweep as run_sweep
 
     scope_volume.reload()
-    description = description or ARCHETYPES.get(name, "")
-    if not description:
-        raise SystemExit(f"no description for {name!r}; pass --description")
+    if name not in ARCHETYPES:
+        raise SystemExit(f"unknown archetype {name!r}; add it to scope/archetype.py")
+    spec = ARCHETYPES[name]
     base = Path(f"{OUTPUT_DIR}/{run}")
     out = base / "archetypes" / slug(name)
     out.mkdir(parents=True, exist_ok=True)
+
+    model = tokenizer = None
     pairs_path = out / "pairs.json"
     if pairs_path.exists():
         pairs = json.loads(pairs_path.read_text())
+    elif spec["prompts"] == "everyday":
+        pairs = everyday_pairs(name, spec, n_pairs)
     else:
-        pairs = make_pairs(name, description, n_pairs)
+        prompts = PROMPT_SETS[spec["prompts"]][:n_pairs]
+        pairs = spark_pairs(name, spec, prompts)
+        missing = [p for p in prompts if p not in {q["prompt"] for q in pairs}]
+        if missing:
+            print(f"{name}: Muse Spark wrote {len(pairs)} pairs, Glimmer writes the other {len(missing)}", flush=True)
+            model, tokenizer = glimmer.load()
+            pairs += glimmer_pairs(model, tokenizer, 24, name, spec, missing)
+    if not pairs_path.exists():
         pairs_path.write_text(json.dumps(pairs, indent=2))
-    print(f"{len(pairs)} pairs for {name}", flush=True)
+        scope_volume.commit()
+    sources = {s: sum(p.get("source") == s for p in pairs) for s in ("muse-spark", "glimmer")}
+    print(f"{len(pairs)} pairs for {name} {sources}", flush=True)
 
-    model, tokenizer = glimmer.load()
+    if model is None:
+        model, tokenizer = glimmer.load()
     sae = TopKSAE.load(base / checkpoint, device="cuda")
-    feats_a, feats_n, resid_a, resid_n = [], [], [], []
-    for pair in pairs:
-        fa, ra = answer_activations(model, tokenizer, sae, pair["prompt"], pair["archetype"])
-        fn, rn = answer_activations(model, tokenizer, sae, pair["prompt"], pair["neutral"])
-        feats_a.append(fa), feats_n.append(fn), resid_a.append(ra), resid_n.append(rn)
-    ranked = rank_features(torch.stack(feats_a), torch.stack(feats_n), top)
+    train_pairs, test_pairs = split_pairs(pairs)
+
+    def activations(rows):
+        feats_a, feats_n, resid_a, resid_n = [], [], [], []
+        for pair in rows:
+            fa, ra = answer_activations(model, tokenizer, sae, pair["prompt"], pair["archetype"])
+            fn, rn = answer_activations(model, tokenizer, sae, pair["prompt"], pair["neutral"])
+            feats_a.append(fa), feats_n.append(fn), resid_a.append(ra), resid_n.append(rn)
+        stack = lambda xs: torch.stack(xs) if xs else torch.empty(0)  # noqa: E731
+        return stack(feats_a), stack(feats_n), stack(resid_a), stack(resid_n)
+
+    fa, fn, ra, rn = activations(train_pairs)
+    ranked = rank_features(fa, fn, top)
+    blend = blend_direction(sae, ranked).detach()
+    mean_difference = mean_difference_direction(ra, rn)
+
+    # the held-out third: does the top feature, or the mean-difference direction, tell the sides apart?
+    detector = {"held_out_pairs": len(test_pairs)}
+    if test_pairs:
+        ta, tn, tra, trn = activations(test_pairs)
+        detector["top_feature"] = detector_accuracy(ta[:, ranked[0]["latent"]], tn[:, ranked[0]["latent"]]) if ranked else None
+        detector["mean_difference"] = detector_accuracy(tra @ mean_difference, trn @ mean_difference)
+
+    save_file(
+        {"blend": blend.float().cpu().contiguous(), "mean_difference": mean_difference.float().cpu().contiguous()},
+        str(out / f"directions-{checkpoint}.safetensors"),
+        metadata={"layer": str(sae.cfg.layer)},
+    )
 
     labels = {}
     if (base / "labels.jsonl").exists():
@@ -348,15 +406,8 @@ def archetype(
     for r in ranked:
         r["feature_label"] = labels.get(r["latent"], "")
 
-    target = f"the archetype '{name}': {description}"
+    target = f"the archetype '{name}': {spec['description']}"
     candidates = [{"latent": r["latent"], "label": target} for r in ranked]
-    blend = blend_direction(sae, ranked).detach()
-    mean_difference = mean_difference_direction(torch.stack(resid_a), torch.stack(resid_n))
-    save_file(
-        {"blend": blend.float().cpu().contiguous(), "mean_difference": mean_difference.float().cpu().contiguous()},
-        str(out / f"directions-{checkpoint}.safetensors"),
-        metadata={"layer": str(sae.cfg.layer)},
-    )
     candidates.append({"name": "blend", "label": target, "direction": blend})
     candidates.append({"name": "mean-difference", "label": target, "direction": mean_difference})
     results_path = out / f"steerability-{checkpoint}.jsonl"
@@ -364,36 +415,90 @@ def archetype(
     run_sweep(
         model, tokenizer, sae, candidates, contexts, str(results_path),
         strengths=tuple(float(s) for s in strengths.split(",")),
+        prompts=EVAL_SETS[spec["prompts"]], max_new_tokens=100,
     )
     results = {(r["name"] or r["latent"]): r for r in map(json.loads, open(results_path))}
     for r in ranked:
         r["steer"] = {k: results.get(r["latent"], {}).get(k) for k in ("score", "best_strength", "observed")}
+    keys = ("score", "best_strength", "observed", "samples")
     summary = {
         "name": name,
-        "description": description,
+        "group": spec["group"],
+        "description": spec["description"],
         "checkpoint": checkpoint,
+        "pairs": len(pairs),
+        "sources": sources,
+        "detector": detector,
         "features": ranked,
-        "blend": {k: results.get("blend", {}).get(k) for k in ("score", "best_strength", "observed", "samples")},
-        "mean_difference": {
-            k: results.get("mean-difference", {}).get(k) for k in ("score", "best_strength", "observed", "samples")
-        },
+        "blend": {k: results.get("blend", {}).get(k) for k in keys},
+        "mean_difference": {k: results.get("mean-difference", {}).get(k) for k in keys},
     }
     (out / f"ranking-{checkpoint}.json").write_text(json.dumps(summary, indent=2))
     scope_volume.commit()
 
-    print(f"\n== {name} ({checkpoint})")
+    lines = [f"\n== {name} ({spec['group']}, {checkpoint}) pairs {sources} detector {detector}"]
     for r in ranked:
         s = r["steer"]
-        print(
+        lines.append(
             f"{r['latent']:>6}  diff {r['mean_diff']:.3f}  wins {r['consistency']:.0%}  steer {s['score']}  "
             f"x{s['best_strength']}  {r['feature_label'][:40]}  ->  {s['observed']}"
         )
     for key in ("blend", "mean_difference"):
         s = summary[key]
-        print(f"{key:>15}: steer {s['score']} x{s['best_strength']} -> {s['observed']}")
+        lines.append(f"{key:>15}: steer {s['score']} x{s['best_strength']} -> {s['observed']}")
         sample = (s.get("samples") or {}).get(str(s["best_strength"]), [""])[0] if s["best_strength"] else ""
         if sample:
-            print(f"                 {' '.join(sample.split())[:220]}")
+            lines.append(f"                 {' '.join(sample.split())[:220]}")
+    report = "\n".join(lines)
+    print(report, flush=True)
+    return report
+
+
+@app.local_entrypoint()
+def archetypes(run: str = "layer24-64k-k64", names: str = "all", skip_done: bool = True):
+    """Run many archetypes from one app (five GPUs at a time), and print each summary as it lands."""
+    from scope.archetype import ARCHETYPES, slug
+
+    chosen = list(ARCHETYPES) if names == "all" else [n.strip() for n in names.split(",")]
+    if skip_done:
+        done = set()
+        for entry in scope_volume.listdir(f"{run}/archetypes", recursive=True):
+            if entry.path.endswith("/directions-final.safetensors"):
+                done.add(entry.path.split("/")[-2])
+        chosen = [n for n in chosen if slug(n) not in done]
+    print(f"running {len(chosen)} archetypes: {', '.join(chosen)}", flush=True)
+    calls = {n: archetype.spawn(run, n) for n in chosen}
+    for n, call in calls.items():
+        try:
+            print(call.get(), flush=True)
+        except Exception as error:
+            print(f"\n== {n} FAILED: {error}", flush=True)
+
+
+@app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=4 * 3600)
+def persona_scan(run: str, batch: int = 80, workers: int = 16):
+    """Muse Spark flags the labeled features that could give Glimmer a persona."""
+    import json
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from scope.archetype import scan_batch
+
+    base = f"{OUTPUT_DIR}/{run}"
+    rows = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
+    rows = [r for r in rows if r["kind"] in ("concept", "unclear") and r["label"]]
+    batches = [rows[i : i + batch] for i in range(0, len(rows), batch)]
+    picked = []
+    with ThreadPoolExecutor(workers) as pool:
+        for future in as_completed([pool.submit(scan_batch, b) for b in batches]):
+            try:
+                picked += future.result()
+            except Exception as error:
+                print(f"scan batch failed: {error}", flush=True)
+    with open(f"{base}/personas.jsonl", "w") as out:
+        for row in sorted(picked, key=lambda r: r["latent"]):
+            out.write(json.dumps(row) + "\n")
+    scope_volume.commit()
+    print(f"{len(picked)} persona candidates from {len(rows)} labeled features")
 
 
 @app.function(volumes=VOLUMES, timeout=600)

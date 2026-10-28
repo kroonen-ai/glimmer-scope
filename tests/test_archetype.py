@@ -33,3 +33,55 @@ def test_directions_are_unit_length():
 
 def test_slug():
     assert slug("Noir Detective!") == "noir-detective"
+
+
+from scope import archetype as arch  # noqa: E402
+
+
+def test_every_archetype_has_prompts_and_eval_prompts():
+    groups = {"character", "companion", "anime", "research"}
+    for name, spec in arch.ARCHETYPES.items():
+        assert spec["group"] in groups, name
+        assert spec["prompts"] in arch.PROMPT_SETS and spec["prompts"] in arch.EVAL_SETS, name
+        assert spec["description"] and spec["contrast"], name
+    for key, prompts in arch.PROMPT_SETS.items():
+        if key == "everyday":
+            continue
+        assert len(prompts) >= 24 and len(set(prompts)) == len(prompts), key
+        assert not set(prompts) & set(arch.EVAL_SETS[key]), f"{key}: eval prompts leak into pairs"
+
+
+def test_split_pairs_is_seeded_and_disjoint():
+    pairs = [{"prompt": str(i)} for i in range(24)]
+    train, test = arch.split_pairs(pairs)
+    assert (len(train), len(test)) == (16, 8)
+    assert not {p["prompt"] for p in train} & {p["prompt"] for p in test}
+    assert arch.split_pairs(pairs) == (train, test)
+    assert arch.split_pairs(pairs[:2]) == (pairs[:2], [])
+
+
+def test_detector_accuracy():
+    assert arch.detector_accuracy(torch.tensor([2.0, 1.0, 0.0]), torch.tensor([1.0, 2.0, -1.0])) == 0.667
+    assert arch.detector_accuracy(torch.empty(0), torch.empty(0)) is None
+
+
+def test_spark_pairs_keeps_only_valid_pairs_for_asked_prompts(monkeypatch):
+    reply = (
+        '[{"prompt": "a", "archetype": "A!", "neutral": "a."},'
+        ' {"prompt": "not asked", "archetype": "x", "neutral": "y"},'
+        ' {"prompt": "b", "archetype": "", "neutral": "b."}]'
+    )
+    monkeypatch.setattr(arch, "chat", lambda *_a, **_k: reply)
+    pairs = arch.spark_pairs("tsundere", arch.ARCHETYPES["tsundere"], ["a", "b", "c"])
+    assert [p["prompt"] for p in pairs] == ["a"] and pairs[0]["source"] == "muse-spark"
+
+
+def test_spark_pairs_survives_a_refusal(monkeypatch):
+    monkeypatch.setattr(arch, "chat", lambda *_a, **_k: "I'd rather not write these.")
+    assert arch.spark_pairs("manipulator", arch.ARCHETYPES["manipulator"], ["a", "b"]) == []
+
+
+def test_scan_batch_keeps_known_latents(monkeypatch):
+    rows = [{"latent": 5, "label": "mob boss talk"}, {"latent": 9, "label": "commas"}]
+    monkeypatch.setattr(arch, "chat", lambda *_a, **_k: '[{"latent": 5, "persona": "mob boss"}, {"latent": 77, "persona": "x"}]')
+    assert arch.scan_batch(rows) == [{"latent": 5, "label": "mob boss talk", "persona": "mob boss"}]
