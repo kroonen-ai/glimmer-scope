@@ -295,6 +295,7 @@ def archetype(
     from pathlib import Path
 
     import torch
+    from safetensors.torch import save_file
 
     from scope import model as glimmer
     from scope.archetype import (
@@ -349,14 +350,15 @@ def archetype(
 
     target = f"the archetype '{name}': {description}"
     candidates = [{"latent": r["latent"], "label": target} for r in ranked]
-    candidates.append({"name": "blend", "label": target, "direction": blend_direction(sae, ranked).detach()})
-    candidates.append(
-        {
-            "name": "mean-difference",
-            "label": target,
-            "direction": mean_difference_direction(torch.stack(resid_a), torch.stack(resid_n)),
-        }
+    blend = blend_direction(sae, ranked).detach()
+    mean_difference = mean_difference_direction(torch.stack(resid_a), torch.stack(resid_n))
+    save_file(
+        {"blend": blend.float().cpu().contiguous(), "mean_difference": mean_difference.float().cpu().contiguous()},
+        str(out / f"directions-{checkpoint}.safetensors"),
+        metadata={"layer": str(sae.cfg.layer)},
     )
+    candidates.append({"name": "blend", "label": target, "direction": blend})
+    candidates.append({"name": "mean-difference", "label": target, "direction": mean_difference})
     results_path = out / f"steerability-{checkpoint}.jsonl"
     results_path.unlink(missing_ok=True)
     run_sweep(
@@ -392,3 +394,22 @@ def archetype(
         sample = (s.get("samples") or {}).get(str(s["best_strength"]), [""])[0] if s["best_strength"] else ""
         if sample:
             print(f"                 {' '.join(sample.split())[:220]}")
+
+
+@app.function(volumes=VOLUMES, timeout=600)
+def directions(run: str, latents: str, checkpoint: str = "final"):
+    """Save the unit decoder directions of some features, for control vectors outside Modal."""
+    import torch
+    from safetensors.torch import save_file
+
+    from scope.sae import TopKSAE
+
+    base = f"{OUTPUT_DIR}/{run}"
+    sae = TopKSAE.load(f"{base}/{checkpoint}", device="cpu")
+    picked = [int(l) for l in latents.split(",")]
+    rows = {str(l): sae.W_dec[l].detach().float().contiguous() for l in picked}
+    os.makedirs(f"{base}/directions", exist_ok=True)
+    path = f"{base}/directions/features-{checkpoint}.safetensors"
+    save_file(rows, path, metadata={"layer": str(sae.cfg.layer), "input_scale": str(sae.cfg.input_scale)})
+    scope_volume.commit()
+    print(f"saved {len(rows)} directions to {path}; norms {[round(float(torch.norm(v)), 3) for v in rows.values()]}")

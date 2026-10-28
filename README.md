@@ -21,7 +21,8 @@ ones that work.
 | `label` | Muse Spark 1.3 Contributor names each feature from its top contexts, with a kind and a guess at how steerable it is | Modal CPU + Meta API |
 | `sweep` | each candidate is added at several strengths (fractions of the layer's median residual norm) to four neutral prompts, answering straight in the user channel; Muse Spark rates concept and fluency per strength and says what the steering actually did; the score is the best concept x fluency / 9 | Modal GPU + Meta API |
 | `top` | the best-steering features so far, with a sample | Modal |
-| demo (next) | a steering server and a feature panel | Modal / local |
+| `archetype` | Muse Spark writes matched archetype/plain answer pairs; features are ranked by how consistently they fire more on the archetype side, then each, their blend, and the plain mean-difference vector are steered and judged | Modal GPU + Meta API |
+| `directions` | saves chosen features' unit decoder directions for use outside Modal | Modal |
 
 Defaults: layer 24 of 52 (0-indexed), 65,536 latents, k = 64, 100M training
 tokens. The forward pass stops right after the SAE's layer, so collection costs
@@ -44,10 +45,34 @@ modal run modal_app.py::steer --run layer24-64k-k64 --latent 1234 --strengths 0,
 `glimmer-scope` Modal volume under the run name. Labeling and judging read
 `META_API_KEY` from the Modal secret `meta`; `JUDGE_MODEL` overrides the model.
 
+## Steering a quantized Glimmer locally
+
+llama.cpp control vectors add a `direction.N` tensor to the output of layer N
+at every token, which is the same place the steering hook works. `scope.cvec`
+turns saved directions into control-vector files scaled by the layer's median
+residual norm (256.6 at layer 24 in BF16), so `--control-vector-scaled
+file.gguf:0.6` matches strength 0.6 in a sweep. The directions carry over to
+the Q4 GGUF without retuning.
+
+```bash
+modal run modal_app.py::directions --run layer24-64k-k64 --latents 20791,34885
+modal volume get glimmer-scope layer24-64k-k64/directions/features-final.safetensors .
+uv run --with gguf --with numpy --with safetensors python -m scope.cvec \
+  features-final.safetensors cvec/ --median 256.6 --name 20791=godfather --name 34885=noir
+llama-server -m muse-glimmer-30B-kquant-17gb.gguf --control-vector-scaled cvec/noir.gguf:0.55
+```
+
+Several `--control-vector-scaled` flags add up, so personas combine.
+`llama-swap/glimmer-personas.yaml` serves a set of them as separate models,
+and `scripts/q4test.py` and `scripts/convo.py` compare strengths and hold a
+multi-turn chat. Steering compounds over a conversation, because the model
+reads its own steered replies back, so chat strengths sit a little below the
+single-reply best.
+
 ## Tests
 
 ```bash
-uv run --python 3.12 --with torch --with numpy --with safetensors --with pytest pytest -q tests
+uv run --python 3.12 --with torch --with numpy --with safetensors --with gguf --with pytest pytest -q tests
 ```
 
 ## Notes
