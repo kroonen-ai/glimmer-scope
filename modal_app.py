@@ -274,3 +274,118 @@ def top(run: str, n: int = 40, min_fluency: int = 2):
         sample = r["samples"].get(str(r["best_strength"]), [""])[0] if r["best_strength"] is not None else ""
         print(f"{r['latent']:>6}  {r['score']:.2f}  x{r['best_strength']}  {r['label']}  ->  {r['observed']}")
         print(f"        {' '.join(sample.split())[:160]}")
+
+
+@app.function(volumes=VOLUMES, secrets=[meta_secret], gpu=GPU, timeout=4 * 3600)
+def archetype(
+    run: str,
+    name: str,
+    description: str = "",
+    n_pairs: int = 24,
+    top: int = 10,
+    strengths: str = "0.2,0.35,0.5,0.7",
+    checkpoint: str = "final",
+):
+    """Rank the features behind an archetype and test steering with them, their blend, and a mean-difference vector."""
+    import gzip
+    import json
+    from pathlib import Path
+
+    import torch
+
+    from scope import model as glimmer
+    from scope.archetype import (
+        ARCHETYPES,
+        answer_activations,
+        blend_direction,
+        make_pairs,
+        mean_difference_direction,
+        rank_features,
+        slug,
+    )
+    from scope.sae import TopKSAE
+    from scope.steerability import contexts_for, sweep as run_sweep
+
+    scope_volume.reload()
+    description = description or ARCHETYPES.get(name, "")
+    if not description:
+        raise SystemExit(f"no description for {name!r}; pass --description")
+    base = Path(f"{OUTPUT_DIR}/{run}")
+    out = base / "archetypes" / slug(name)
+    out.mkdir(parents=True, exist_ok=True)
+    pairs_path = out / "pairs.json"
+    if pairs_path.exists():
+        pairs = json.loads(pairs_path.read_text())
+    else:
+        pairs = make_pairs(name, description, n_pairs)
+        pairs_path.write_text(json.dumps(pairs, indent=2))
+    print(f"{len(pairs)} pairs for {name}", flush=True)
+
+    model, tokenizer = glimmer.load()
+    sae = TopKSAE.load(base / checkpoint, device="cuda")
+    feats_a, feats_n, resid_a, resid_n = [], [], [], []
+    for pair in pairs:
+        fa, ra = answer_activations(model, tokenizer, sae, pair["prompt"], pair["archetype"])
+        fn, rn = answer_activations(model, tokenizer, sae, pair["prompt"], pair["neutral"])
+        feats_a.append(fa), feats_n.append(fn), resid_a.append(ra), resid_n.append(rn)
+    ranked = rank_features(torch.stack(feats_a), torch.stack(feats_n), top)
+
+    labels = {}
+    if (base / "labels.jsonl").exists():
+        labels = {r["latent"]: r["label"] for r in map(json.loads, open(base / "labels.jsonl"))}
+    contexts = {}
+    wanted = {r["latent"] for r in ranked}
+    if (base / "catalog.jsonl.gz").exists():
+        with gzip.open(base / "catalog.jsonl.gz", "rt") as f:
+            for line in f:
+                row = json.loads(line)
+                if row["latent"] in wanted:
+                    contexts[row["latent"]] = contexts_for(row)
+    for r in ranked:
+        r["feature_label"] = labels.get(r["latent"], "")
+
+    target = f"the archetype '{name}': {description}"
+    candidates = [{"latent": r["latent"], "label": target} for r in ranked]
+    candidates.append({"name": "blend", "label": target, "direction": blend_direction(sae, ranked).detach()})
+    candidates.append(
+        {
+            "name": "mean-difference",
+            "label": target,
+            "direction": mean_difference_direction(torch.stack(resid_a), torch.stack(resid_n)),
+        }
+    )
+    results_path = out / f"steerability-{checkpoint}.jsonl"
+    results_path.unlink(missing_ok=True)
+    run_sweep(
+        model, tokenizer, sae, candidates, contexts, str(results_path),
+        strengths=tuple(float(s) for s in strengths.split(",")),
+    )
+    results = {(r["name"] or r["latent"]): r for r in map(json.loads, open(results_path))}
+    for r in ranked:
+        r["steer"] = {k: results.get(r["latent"], {}).get(k) for k in ("score", "best_strength", "observed")}
+    summary = {
+        "name": name,
+        "description": description,
+        "checkpoint": checkpoint,
+        "features": ranked,
+        "blend": {k: results.get("blend", {}).get(k) for k in ("score", "best_strength", "observed", "samples")},
+        "mean_difference": {
+            k: results.get("mean-difference", {}).get(k) for k in ("score", "best_strength", "observed", "samples")
+        },
+    }
+    (out / f"ranking-{checkpoint}.json").write_text(json.dumps(summary, indent=2))
+    scope_volume.commit()
+
+    print(f"\n== {name} ({checkpoint})")
+    for r in ranked:
+        s = r["steer"]
+        print(
+            f"{r['latent']:>6}  diff {r['mean_diff']:.3f}  wins {r['consistency']:.0%}  steer {s['score']}  "
+            f"x{s['best_strength']}  {r['feature_label'][:40]}  ->  {s['observed']}"
+        )
+    for key in ("blend", "mean_difference"):
+        s = summary[key]
+        print(f"{key:>15}: steer {s['score']} x{s['best_strength']} -> {s['observed']}")
+        sample = (s.get("samples") or {}).get(str(s["best_strength"]), [""])[0] if s["best_strength"] else ""
+        if sample:
+            print(f"                 {' '.join(sample.split())[:220]}")

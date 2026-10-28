@@ -107,7 +107,8 @@ def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict
     verdict = json_from(chat(judge_prompt(feature, contexts, baseline, steered)))
     value, strength = score(verdict)
     return {
-        "latent": feature["latent"],
+        "latent": feature.get("latent"),
+        "name": feature.get("name"),
         "label": feature.get("label", ""),
         "score": round(value, 3),
         "best_strength": strength,
@@ -117,9 +118,19 @@ def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict
     }
 
 
-def plan_rows(latents: list[int], n_prompts: int) -> list[tuple[int, int]]:
-    """(latent, prompt index) for every generated row, feature-major."""
-    return [(latent, p) for latent in latents for p in range(n_prompts)]
+def plan_rows(keys: list, n_prompts: int) -> list[tuple]:
+    """(feature key, prompt index) for every generated row, feature-major."""
+    return [(key, p) for key in keys for p in range(n_prompts)]
+
+
+def feature_key(feature: dict):
+    """Single features are keyed by latent; composite directions carry a name."""
+    return feature.get("name") or feature["latent"]
+
+
+def feature_direction(sae, feature: dict) -> torch.Tensor:
+    direction = feature.get("direction")
+    return direction if direction is not None else sae.W_dec[feature["latent"]]
 
 
 def sweep(
@@ -146,19 +157,20 @@ def sweep(
         futures = []
         for start in range(0, len(features), per_batch):
             chunk = features[start : start + per_batch]
-            rows = plan_rows([f["latent"] for f in chunk], len(prompts))
-            steered: dict[int, dict[float, list[str]]] = {f["latent"]: {} for f in chunk}
-            directions = sae.W_dec[[latent for latent, _ in rows]].detach().to("cuda", torch.float32)
+            by_key = {feature_key(f): f for f in chunk}
+            rows = plan_rows(list(by_key), len(prompts))
+            steered: dict = {key: {} for key in by_key}
+            directions = torch.stack(
+                [feature_direction(sae, by_key[key]).detach().to("cuda", torch.float32) for key, _ in rows]
+            )
             for strength in strengths:
                 texts = generate(
                     model, tokenizer, [prefixes[p] for _, p in rows], layer, directions * (strength * median), max_new_tokens
                 )
-                for (latent, _), text in zip(rows, texts):
-                    steered[latent].setdefault(strength, []).append(text)
-            for feature in chunk:
-                futures.append(
-                    pool.submit(judge, feature, contexts.get(feature["latent"], []), baseline, steered[feature["latent"]])
-                )
+                for (key, _), text in zip(rows, texts):
+                    steered[key].setdefault(strength, []).append(text)
+            for key, feature in by_key.items():
+                futures.append(pool.submit(judge, feature, contexts.get(key, []), baseline, steered[key]))
             done = [f for f in futures if f.done()]
             for future in done:
                 futures.remove(future)
@@ -175,7 +187,7 @@ def _write(out, future) -> int:
     except Exception as error:
         print(f"judge failed: {error}", flush=True)
         return 0
-    out.write(json.dumps(result) + "\n")
+    out.write(json.dumps(result, default=str) + "\n")
     out.flush()
     return 1
 
