@@ -42,7 +42,7 @@ def build_catalog(
     batch: int = 32,
     chat_fraction: float = 0.3,
     seed: int = 1,
-    skip: int = 200_000,
+    split: str = "catalog",
 ) -> dict:
     n = sae.cfg.n_latents
     best_vals = np.full((n, top_n), -np.inf, dtype=np.float32)
@@ -52,11 +52,12 @@ def build_catalog(
     token_rows: list[np.ndarray] = []
     seen = 0
     kept_total = 0
+    sink_ids = tuple(i for i in (tokenizer.bos_token_id,) if i is not None)
 
-    for ids, mask in token_batches(tokenizer, seq_len, batch, chat_fraction, seed, skip):
+    for ids, mask in token_batches(tokenizer, seq_len, batch, chat_fraction, seed, split):
         ids_d, mask_d = ids.cuda(), mask.cuda()
         acts = residual(model, ids_d, mask_d, sae.cfg.layer)
-        keep = keep_mask(acts, mask_d).reshape(-1)
+        keep = keep_mask(acts, mask_d, ids_d, sink_ids).reshape(-1)
         x = acts.reshape(-1, acts.shape[-1]).float() * sae.cfg.input_scale
         vals_parts, idx_parts = [], []
         for chunk in range(0, x.shape[0], 4096):

@@ -1,6 +1,7 @@
 """Glimmer Scope on Modal.
 
     modal run modal_app.py::download            # once: weights into the volume (CPU)
+    modal run modal_app.py::download_data       # once: training and held-out text shards
     modal run modal_app.py::smoke               # load, measure, check hooks (~10 min GPU)
     modal run --detach modal_app.py::train      # train an SAE (hours)
     modal run modal_app.py::catalog --run layer24-64k-k64
@@ -29,7 +30,7 @@ image = (
         "huggingface_hub[hf_transfer]",
         "numpy",
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "TOKENIZERS_PARALLELISM": "false"})
+    .env({"HF_XET_HIGH_PERFORMANCE": "1", "TOKENIZERS_PARALLELISM": "false"})
     .add_local_python_source("scope")
 )
 
@@ -55,6 +56,22 @@ def download():
     weights.commit()
     total = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(WEIGHTS_DIR) for f in fs)
     print(f"weights in volume: {total / 1e9:.1f} GB")
+
+
+@app.function(volumes=VOLUMES, cpu=4, timeout=3600)
+def download_data():
+    from huggingface_hub import hf_hub_download
+
+    from scope.data import DATA_DIR, SHARDS
+
+    for kind, spec in SHARDS.items():
+        for split in ("train", "catalog"):
+            for path in spec[split]:
+                local = hf_hub_download(spec["repo"], path, repo_type="dataset", local_dir=f"{DATA_DIR}/{kind}/_hf")
+                target = f"{DATA_DIR}/{kind}/{path.rsplit('/', 1)[-1]}"
+                os.replace(local, target)
+                print(f"{target}: {os.path.getsize(target) / 1e9:.2f} GB")
+    scope_volume.commit()
 
 
 @app.function(volumes=VOLUMES, gpu=GPU, timeout=3600)
@@ -122,7 +139,7 @@ def smoke(layer: int = 24):
 
 
 @app.function(volumes=VOLUMES, gpu=GPU, timeout=24 * 3600)
-def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: int = 100_000_000):
+def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: int = 100_000_000, tag: str = ""):
     from scope import model as glimmer
     from scope.config import SAEConfig, TrainConfig
     from scope.train import train as run_training
@@ -130,7 +147,7 @@ def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: in
     model, tokenizer = glimmer.load()
     sae_cfg = SAEConfig(layer=layer, n_latents=n_latents, k=k)
     cfg = TrainConfig(total_tokens=total_tokens)
-    out = f"{OUTPUT_DIR}/{run_name(layer, n_latents, k)}"
+    out = f"{OUTPUT_DIR}/{run_name(layer, n_latents, k)}{'-' + tag if tag else ''}"
     final = run_training(model, tokenizer, sae_cfg, cfg, out, commit=scope_volume.commit)
     print(f"saved {final}")
 

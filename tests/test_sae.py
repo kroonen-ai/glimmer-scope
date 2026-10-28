@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scope.config import SAEConfig  # noqa: E402
 from scope.interpret import merge_top  # noqa: E402
+from scope.model import keep_mask  # noqa: E402
 from scope.sae import TopKSAE  # noqa: E402
 
 
@@ -85,3 +86,12 @@ def test_merge_top_keeps_the_highest_per_latent():
     assert best_ptr[1].tolist() == [-1, -1]
     best_vals, best_ptr = merge_top(best_vals, best_ptr, np.array([4.0], dtype=np.float32), np.array([0]), np.array([20]), top)
     assert best_vals[0].tolist() == [5.0, 4.0] and best_ptr[0].tolist() == [11, 20]
+
+
+def test_keep_mask_drops_first_position_bos_tokens_and_outliers():
+    acts = torch.ones(1, 6, 4)
+    acts[0, 4] *= 100  # attention-sink sized
+    ids = torch.tensor([[7, 5, 7, 5, 5, 5]])
+    mask = torch.tensor([[1, 1, 1, 1, 1, 0]])
+    keep = keep_mask(acts, mask, ids, exclude_ids=(7,))
+    assert keep.tolist() == [[False, True, False, True, False, False]]

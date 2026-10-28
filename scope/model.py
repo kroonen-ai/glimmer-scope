@@ -65,10 +65,24 @@ def steering(model, layer: int, vector: torch.Tensor):
         handle.remove()
 
 
-def keep_mask(acts: torch.Tensor, attention_mask: torch.Tensor, outlier_factor: float = 10.0) -> torch.Tensor:
-    """Positions worth training on: real tokens, not the first one, no attention-sink outliers."""
+def keep_mask(
+    acts: torch.Tensor,
+    attention_mask: torch.Tensor,
+    input_ids: torch.Tensor | None = None,
+    exclude_ids: tuple[int, ...] = (),
+    outlier_factor: float = 10.0,
+) -> torch.Tensor:
+    """Positions worth training on: real tokens, not the first one, no attention sinks.
+
+    Glimmer's chat template starts every conversation with <|begin_of_text|>, so
+    packed rows carry BOS tokens mid-sequence; like position 0 they act as
+    attention sinks with outsized activations, and are dropped by id.
+    """
     keep = attention_mask.bool().clone()
     keep[:, 0] = False
+    if input_ids is not None:
+        for token_id in exclude_ids:
+            keep &= input_ids != token_id
     norms = acts.float().norm(dim=-1)
     median = norms[keep].median() if keep.any() else norms.median()
     keep &= norms < outlier_factor * median

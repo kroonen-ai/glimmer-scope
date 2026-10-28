@@ -42,6 +42,7 @@ def learning_rate(cfg: TrainConfig, sae_cfg: SAEConfig, step: int, total_steps: 
 
 
 def train(model, tokenizer, sae_cfg: SAEConfig, cfg: TrainConfig, out_dir: str, commit=lambda: None) -> Path:
+    torch.backends.cuda.matmul.allow_tf32 = True
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     (out / "train_cfg.json").write_text(json.dumps(cfg.__dict__, indent=2))
@@ -51,6 +52,7 @@ def train(model, tokenizer, sae_cfg: SAEConfig, cfg: TrainConfig, out_dir: str, 
     buffer = ActivationBuffer(cfg.buffer_tokens, sae_cfg.d_in, device)
     model_tokens = 0
     model_seconds = 0.0
+    sink_ids = tuple(i for i in (tokenizer.bos_token_id,) if i is not None)
 
     def fill() -> None:
         nonlocal model_tokens, model_seconds
@@ -59,7 +61,7 @@ def train(model, tokenizer, sae_cfg: SAEConfig, cfg: TrainConfig, out_dir: str, 
             ids, mask = ids.to(device), mask.to(device)
             started = time.time()
             acts = residual(model, ids, mask, sae_cfg.layer)
-            keep = keep_mask(acts, mask)
+            keep = keep_mask(acts, mask, ids, sink_ids)
             buffer.add(acts[keep])
             torch.cuda.synchronize()
             model_seconds += time.time() - started
