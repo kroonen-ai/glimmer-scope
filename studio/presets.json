@@ -1,0 +1,5 @@
+[
+  {"name": "Tsundere (classic)", "mix": {"tsundere": 0.4, "friendly": 0.25}, "note": "the tsundere vector is the prickly half; Friendly adds the care"},
+  {"name": "London mob", "mix": {"godfather": 0.45, "british": 0.45}, "note": "Godfather + British"},
+  {"name": "Pirate in Britain", "mix": {"pirate": 0.4, "british": 0.4}, "note": "Pirate + British"}
+]
