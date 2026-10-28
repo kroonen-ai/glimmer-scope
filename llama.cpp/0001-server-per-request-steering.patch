@@ -1,0 +1,375 @@
+From 34017222f3068bb60707436570ed46c9efe9f955 Mon Sep 17 00:00:00 2001
+From: Kroonen AI
+Date: Wed, 28 Oct 2026 14:51:04 +0100
+Subject: [PATCH] server : per-request steering with control vectors from
+ --steering-dir
+
+---
+ common/arg.cpp                  |   8 ++
+ common/common.h                 |   1 +
+ tools/server/server-context.cpp | 133 +++++++++++++++++++++++++++++++-
+ tools/server/server-context.h   |   4 +
+ tools/server/server-schema.cpp  |  31 ++++++++
+ tools/server/server-task.cpp    |  10 +++
+ tools/server/server-task.h      |   1 +
+ tools/server/server.cpp         |   2 +
+ 8 files changed, 189 insertions(+), 1 deletion(-)
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 8b302d5d7..68c15f784 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -3021,6 +3021,14 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             params.control_vector_layer_end = std::stoi(end);
+         }
+     ));
++    add_opt(common_arg(
++        {"--steering-dir"}, "DIR",
++        "directory of control vectors (.gguf) that each request can mix by name with a \"steering\" field; "
++        "an optional steering.json there adds labels for GET /steering. Disables the RAM prompt cache",
++        [](common_params & params, const std::string & value) {
++            params.steering_dir = value;
++        }
++    ).set_env("LLAMA_ARG_STEERING_DIR").set_examples({LLAMA_EXAMPLE_SERVER}));
+     add_opt(common_arg(
+         {"-a", "--alias"}, "STRING",
+         "set model name aliases, comma-separated (to be used by API)",
+diff --git a/common/common.h b/common/common.h
+index 0c2d5e46f..39e6faeb7 100644
+--- a/common/common.h
++++ b/common/common.h
+@@ -541,6 +541,7 @@ struct common_params {
+     int32_t verbosity                  = 3;  // LOG_LEVEL_INFO
+     int32_t control_vector_layer_start = -1; // layer range for control vector
+     int32_t control_vector_layer_end   = -1; // layer range for control vector
++    std::string steering_dir = ""; // control vectors that server requests can mix by name
+     bool    offline                    = false;
+ 
+     int32_t ppl_stride      = 0;     // stride for perplexity calculations. If left at 0, the pre-existing approach will be used.
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index a18b7542c..1cefdf4de 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -351,6 +351,9 @@ struct server_slot {
+     std::vector<common_adapter_lora_info> lora;
+     int32_t alora_invocation_start = -1;
+ 
++    // the steering mix this slot's cached prompt was computed under
++    std::map<std::string, float> steering;
++
+     // sampling
+     json json_schema;
+ 
+@@ -484,7 +487,8 @@ struct server_slot {
+ 
+         return task->type == other_slot.task->type
+             && inp_embd.size() == other_slot.inp_embd.size()
+-            && are_lora_equal(lora, other_slot.lora);
++            && are_lora_equal(lora, other_slot.lora)
++            && steering == other_slot.steering;
+     }
+ 
+     // returns -1 if the generation is limitless
+@@ -1034,6 +1038,101 @@ private:
+ 
+     json json_ui_settings = json::object();
+ 
++    // control vectors that requests mix by name with a "steering" field, from --steering-dir
++    std::map<std::string, common_control_vector_data> steering_vectors;
++    common_control_vector_data steering_base = { -1, {} }; // from --control-vector, kept under every mix
++    std::map<std::string, float> steering_active;          // the mix the context holds now
++    json steering_info = json::object();
++
++    void load_steering(const std::string & dir) {
++        namespace fs = std::filesystem;
++        const int32_t n_embd = llama_model_n_embd(model_tgt);
++
++        json labels = json::object();
++        const fs::path labels_path = fs::path(dir) / "steering.json";
++        if (fs::exists(labels_path)) {
++            try {
++                std::ifstream f(labels_path);
++                labels = json::parse(std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>()));
++            } catch (const std::exception & e) {
++                SRV_WRN("ignoring %s: %s\n", labels_path.string().c_str(), e.what());
++            }
++        }
++
++        std::vector<fs::path> files;
++        for (const auto & entry : fs::directory_iterator(dir)) {
++            if (entry.is_regular_file() && entry.path().extension() == ".gguf") {
++                files.push_back(entry.path());
++            }
++        }
++        std::sort(files.begin(), files.end());
++
++        json vectors = json::array();
++        for (const auto & path : files) {
++            auto data = common_control_vector_load({ { 1.0f, path.string() } });
++            if (data.n_embd != n_embd) {
++                SRV_WRN("skipping steering vector %s: width %d, model has %d\n", path.string().c_str(), data.n_embd, n_embd);
++                continue;
++            }
++            const std::string name = path.stem().string();
++            steering_vectors[name] = std::move(data);
++            json info = { { "name", name } };
++            if (labels.is_object() && labels.contains(name) && labels.at(name).is_object()) {
++                for (const auto & [key, value] : labels.at(name).items()) {
++                    info[key] = value;
++                }
++            }
++            vectors.push_back(info);
++        }
++
++        if (!params_base.control_vectors.empty()) {
++            steering_base = common_control_vector_load(params_base.control_vectors);
++        }
++        steering_info = { { "vectors", vectors } };
++        SRV_INF("loaded %zu steering vectors from %s\n", steering_vectors.size(), dir.c_str());
++    }
++
++    // set the context's control vector to the base plus this mix, only when it changes
++    void apply_steering(const std::map<std::string, float> & mix) {
++        if (steering_vectors.empty() || mix == steering_active) {
++            return;
++        }
++        const int32_t n_embd  = llama_model_n_embd(model_tgt);
++        const int32_t n_layer = llama_model_n_layer(model_tgt);
++
++        // a buffer for every layer, so whatever the last mix touched is zeroed too
++        std::vector<float> data((size_t) n_embd * (n_layer - 1), 0.0f);
++        auto add_vector = [&](const common_control_vector_data & v, float strength) {
++            const size_t n = std::min(v.data.size(), data.size());
++            for (size_t i = 0; i < n; ++i) {
++                data[i] += strength * v.data[i];
++            }
++        };
++        if (steering_base.n_embd == n_embd) {
++            add_vector(steering_base, 1.0f);
++        }
++        for (const auto & [name, strength] : mix) {
++            add_vector(steering_vectors.at(name), strength);
++        }
++
++        // only the layers that carry a direction go into the graph
++        int32_t il_start = -1;
++        int32_t il_end   = -1;
++        for (int32_t il = 1; il < n_layer; ++il) {
++            const float * row = data.data() + (size_t) n_embd * (il - 1);
++            if (std::any_of(row, row + n_embd, [](float x) { return x != 0.0f; })) {
++                il_start = il_start < 0 ? il : il_start;
++                il_end   = il;
++            }
++        }
++        if (il_start < 0) {
++            llama_set_adapter_cvec(ctx_tgt, nullptr, 0, n_embd, -1, -1);
++        } else {
++            llama_set_adapter_cvec(ctx_tgt, data.data(), data.size(), n_embd, il_start, il_end);
++        }
++        steering_active = mix;
++    }
++
+     // Necessary similarity of prompt for slot selection
+     float slot_prompt_similarity = 0.0f;
+ 
+@@ -1490,6 +1589,16 @@ private:
+             batch.init(ctx_tgt, std::max(n_batch, params_base.n_parallel), n_embd);
+         }
+ 
++        if (!params_base.steering_dir.empty()) {
++            load_steering(params_base.steering_dir);
++            // cached prompts would come back computed under whatever mix made them
++            if (params_base.cache_ram_mib != 0) {
++                SRV_INF("%s", "steering: RAM prompt cache disabled\n");
++            }
++            params_base.cache_ram_mib    = 0;
++            params_base.cache_idle_slots = false;
++        }
++
+         // decision requests rarely repeat a state, the prompt cache is opt-in for decision models
+         if (decision.type != COMMON_DECISION_TYPE_NONE && !params_base.cache_ram_explicit) {
+             SRV_INF("%s", "decision model: prompt cache disabled by default, use `--cache-ram N` to enable it\n");
+@@ -1848,6 +1957,20 @@ private:
+     }
+ 
+     bool launch_slot_with_task(server_slot & slot, server_task && task) {
++        for (const auto & [name, strength] : task.params.steering) {
++            if (steering_vectors.find(name) == steering_vectors.end()) {
++                send_error(task, steering_vectors.empty() ? std::string("steering needs --steering-dir") : "unknown steering vector: " + name,
++                           ERROR_TYPE_INVALID_REQUEST);
++                return false;
++            }
++        }
++        if (task.params.steering != slot.steering) {
++            // the cached prompt was computed under another mix
++            SLT_INF(slot, "clearing cache for steering change, %zu -> %zu vectors\n", slot.steering.size(), task.params.steering.size());
++            slot.prompt_clear();
++            slot.steering = task.params.steering;
++        }
++
+         // process per-request lora adapters
+         if (!task.params.lora.empty()) {
+             auto task_loras = construct_lora_list(task.params.lora);
+@@ -3315,6 +3438,7 @@ private:
+             // TODO @ngxson : alora handling is too messy, need to refactor it to be more clear and maintainable
+             // apply lora, only need to do it once per batch
+             common_set_adapter_lora(ctx_tgt, slot_batched->lora);
++            apply_steering(slot_batched->steering);
+ 
+             // if the lora is temporarily disabled for an alora, re-enable it
+             // for next time
+@@ -4847,6 +4971,7 @@ server_context_meta server_context::get_meta() const {
+         /* model_n_params          */ llama_model_n_params(impl->model_tgt),
+         /* model_size              */ llama_model_size(impl->model_tgt),
+         /* model_ftype             */ ftype_name,
++        /* steering                */ impl->steering_info,
+     };
+ }
+ 
+@@ -5440,6 +5565,12 @@ void server_routes::init_routes() {
+         return res;
+     };
+ 
++    this->get_steering = [this](const server_http_req &) {
++        auto res = create_response(true);
++        res->ok(meta->steering);
++        return res;
++    };
++
+     this->post_props = [this](const server_http_req &) {
+         auto res = create_response();
+         if (!params.endpoint_props) {
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+index ed23f7d4e..58ae8d823 100644
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -53,6 +53,9 @@ struct server_context_meta {
+     uint64_t model_n_params;
+     uint64_t model_size;
+     std::string model_ftype;
++
++    // vectors from --steering-dir, for GET /steering
++    json steering;
+ };
+ 
+ enum server_state {
+@@ -156,6 +159,7 @@ struct server_routes {
+     server_http_context::handler_t post_systemone;
+     server_http_context::handler_t get_lora_adapters;
+     server_http_context::handler_t post_lora_adapters;
++    server_http_context::handler_t get_steering;
+ 
+     // to be used in router mode
+     json get_model_info() const;
+diff --git a/tools/server/server-schema.cpp b/tools/server/server-schema.cpp
+index 54e126aa0..d15329cb5 100644
+--- a/tools/server/server-schema.cpp
++++ b/tools/server/server-schema.cpp
+@@ -236,6 +236,37 @@ std::vector<std::unique_ptr<field>> make_llama_cmpl_schema(const common_params &
+             ctx.params.lora = parse_lora_request(lora);
+         }));
+ 
++    add((new field_json("steering"))
++        ->set_desc("Control vectors from --steering-dir to add for this request: an object of name -> strength, or an array of {name, strength}. Vectors not listed are off")
++        ->set_handler([&](field_eval_context & ctx, const json & data) {
++            const auto & steering = data.at("steering");
++            std::map<std::string, float> mix;
++            auto add_vector = [&](const std::string & name, const json & strength) {
++                if (!strength.is_number()) {
++                    throw std::runtime_error("Error: steering strengths must be numbers");
++                }
++                const float value = strength.get<float>();
++                if (value != 0.0f) {
++                    mix[name] += value;
++                }
++            };
++            if (steering.is_object()) {
++                for (const auto & [name, strength] : steering.items()) {
++                    add_vector(name, strength);
++                }
++            } else if (steering.is_array()) {
++                for (const auto & item : steering) {
++                    if (!item.is_object() || !item.contains("name") || !item.at("name").is_string()) {
++                        throw std::runtime_error("Error: each steering entry needs a string 'name' and a numeric 'strength'");
++                    }
++                    add_vector(item.at("name").get<std::string>(), item.value("strength", json(0.0)));
++                }
++            } else if (!steering.is_null()) {
++                throw std::runtime_error("Error: 'steering' must be an object of name -> strength or an array of {name, strength}");
++            }
++            ctx.params.steering = std::move(mix);
++        }));
++
+     // sequence breakers for DRY
+     // Currently, this is not compatible with TextGen WebUI, Koboldcpp and SillyTavern format
+     // Ref: https://github.com/oobabooga/text-generation-webui/blob/d1af7a41ade7bd3c3a463bfa640725edb818ebaf/extensions/openai/typing.py#L39
+diff --git a/tools/server/server-task.cpp b/tools/server/server-task.cpp
+index 3f30da2cd..59367c7ac 100644
+--- a/tools/server/server-task.cpp
++++ b/tools/server/server-task.cpp
+@@ -27,6 +27,14 @@ json task_params::format_logit_bias(const std::vector<llama_logit_bias> & logit_
+     return data;
+ }
+ 
++static json steering_to_json(const std::map<std::string, float> & mix) {
++    json out = json::object();
++    for (const auto & [name, strength] : mix) {
++        out[name] = strength;
++    }
++    return out;
++}
++
+ json task_params::to_json(bool only_metrics) const {
+     std::vector<std::string> samplers;
+     samplers.reserve(sampling.samplers.size());
+@@ -83,6 +91,7 @@ json task_params::to_json(bool only_metrics) const {
+             {"post_sampling_probs",       post_sampling_probs},
+             {"backend_sampling",          sampling.backend_sampling},
+             {"lora",                      lora},
++            {"steering",                  steering_to_json(steering)},
+         };
+     }
+ 
+@@ -142,6 +151,7 @@ json task_params::to_json(bool only_metrics) const {
+         {"post_sampling_probs",       post_sampling_probs},
+         {"backend_sampling",          sampling.backend_sampling},
+         {"lora",                      lora},
++        {"steering",                  steering_to_json(steering)},
+     };
+ }
+ 
+diff --git a/tools/server/server-task.h b/tools/server/server-task.h
+index e7bb04398..723e94758 100644
+--- a/tools/server/server-task.h
++++ b/tools/server/server-task.h
+@@ -69,6 +69,7 @@ struct task_params {
+     int64_t t_max_predict_ms = -1; // if positive, limit the generation phase to this time limit
+ 
+     std::map<int, float> lora; // mapping adapter ID -> scale
++    std::map<std::string, float> steering; // control vector name -> strength, from --steering-dir
+ 
+     std::vector<std::string> antiprompt;
+     std::vector<std::string> response_fields;
+diff --git a/tools/server/server.cpp b/tools/server/server.cpp
+index 871e827be..9cb84592a 100644
+--- a/tools/server/server.cpp
++++ b/tools/server/server.cpp
+@@ -246,6 +246,7 @@ int llama_server(common_params & params, int argc, char ** argv, server_child &
+         routes.post_responses_tok_oai      = models_routes->proxy_post;
+         routes.get_lora_adapters           = models_routes->proxy_get;
+         routes.post_lora_adapters          = models_routes->proxy_post;
++        routes.get_steering                = models_routes->proxy_get;
+         routes.get_slots                   = models_routes->proxy_get;
+         routes.post_slots                  = models_routes->proxy_post;
+ 
+@@ -299,6 +300,7 @@ int llama_server(common_params & params, int argc, char ** argv, server_child &
+     // LoRA adapters hotswap
+     ctx_http.get ("/lora-adapters",            ex_wrapper(routes.get_lora_adapters));
+     ctx_http.post("/lora-adapters",            ex_wrapper(routes.post_lora_adapters));
++    ctx_http.get ("/steering",                 ex_wrapper(routes.get_steering));
+     // Save & load slots
+     ctx_http.get ("/slots",                    ex_wrapper(routes.get_slots));
+     ctx_http.post("/slots/:id_slot",           ex_wrapper(routes.post_slots));
+-- 
+2.43.0
+

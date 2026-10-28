@@ -69,6 +69,27 @@ multi-turn chat. Steering compounds over a conversation, because the model
 reads its own steered replies back, so chat strengths sit a little below the
 single-reply best.
 
+## Glimmer Studio: live sliders
+
+`llama.cpp/0001-server-per-request-steering.patch` (against llama.cpp
+c0fd786) teaches llama-server to mix control vectors per request:
+
+- `--steering-dir DIR` loads every `.gguf` control vector in `DIR`, named by
+  file stem; an optional `steering.json` there adds a label, description,
+  source and suggested strength for each.
+- Requests take `"steering": {"noir": 0.55, "british": 0.3}` (or an array of
+  `{name, strength}`) on `/v1/chat/completions` and `/completion`; unknown
+  names are a 400. Vectors passed with `--control-vector` stay underneath.
+- `GET /steering` lists the vectors.
+- A slot whose steering changes drops its cached prompt, and the RAM prompt
+  cache is off, so no reply reuses KV computed under another mix.
+
+`studio/index.html` is the slider UI: one dial per vector, streaming chat,
+the mix shown on every reply, and an optional unsteered reply side by side.
+Serve it with `--path studio/` and open the server's root, or through
+llama-swap at `/upstream/glimmer-studio/` (see `llama-swap/`).
+`scripts/live_test.py` checks the server end to end.
+
 ## Tests
 
 ```bash
