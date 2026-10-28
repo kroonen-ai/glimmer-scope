@@ -502,7 +502,7 @@ def persona_scan(run: str, batch: int = 80, workers: int = 16):
 
 
 @app.function(volumes=VOLUMES, timeout=600)
-def directions(run: str, latents: str, checkpoint: str = "final"):
+def directions(run: str, latents: str, checkpoint: str = "final", name: str = "features"):
     """Save the unit decoder directions of some features, for control vectors outside Modal."""
     import torch
     from safetensors.torch import save_file
@@ -514,7 +514,46 @@ def directions(run: str, latents: str, checkpoint: str = "final"):
     picked = [int(l) for l in latents.split(",")]
     rows = {str(l): sae.W_dec[l].detach().float().contiguous() for l in picked}
     os.makedirs(f"{base}/directions", exist_ok=True)
-    path = f"{base}/directions/features-{checkpoint}.safetensors"
+    path = f"{base}/directions/{name}-{checkpoint}.safetensors"
     save_file(rows, path, metadata={"layer": str(sae.cfg.layer), "input_scale": str(sae.cfg.input_scale)})
     scope_volume.commit()
     print(f"saved {len(rows)} directions to {path}; norms {[round(float(torch.norm(v)), 3) for v in rows.values()]}")
+
+
+@app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=3600)
+def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
+    """Re-judge every archetype's steering for the archetype itself, and pick each one's best direction."""
+    import json
+    from concurrent.futures import ThreadPoolExecutor
+    from pathlib import Path
+
+    from scope.archetype import ARCHETYPES, slug, target_judge
+
+    base = Path(f"{OUTPUT_DIR}/{run}/archetypes")
+    jobs = []
+    for name, spec in ARCHETYPES.items():
+        path = base / slug(name) / f"steerability-{checkpoint}.jsonl"
+        if path.exists():
+            jobs += [(name, spec, json.loads(line)) for line in open(path)]
+
+    def run_one(job):
+        name, spec, entry = job
+        try:
+            return name, target_judge(name, spec, entry)
+        except Exception as error:
+            return name, {"candidate": entry.get("name") or entry.get("latent"), "error": str(error)}
+
+    with ThreadPoolExecutor(workers) as pool:
+        results = list(pool.map(run_one, jobs))
+    summary = {}
+    for name in ARCHETYPES:
+        rows = [r for n, r in results if n == name]
+        if not rows:
+            continue
+        (base / slug(name) / f"target-{checkpoint}.json").write_text(json.dumps(rows, indent=2))
+        scored = sorted((r for r in rows if "target_score" in r), key=lambda r: -r["target_score"])
+        summary[name] = {"best": scored[0] if scored else None, "all": rows}
+        best = scored[0] if scored else {}
+        print(f"{name:18} best {str(best.get('candidate')):16} {best.get('target_score')} x{best.get('best_strength')}  {best.get('verdict', '')}")
+    (base / f"targets-{checkpoint}.json").write_text(json.dumps(summary, indent=2))
+    scope_volume.commit()

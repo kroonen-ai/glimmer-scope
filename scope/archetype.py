@@ -206,3 +206,38 @@ def scan_batch(rows: list[dict]) -> list[dict]:
         if latent in by_latent:
             picked.append({**by_latent[latent], "persona": str(item.get("persona", "")).strip()})
     return picked
+
+
+TARGET_JUDGE = """A language model was steered toward an archetype by adding a direction to its activations.
+Target archetype: {name}. {description}
+
+Steered answers at each strength:
+{steered}
+
+For each strength rate:
+- "target": 0-3, how clearly the answers ARE this specific archetype (0 = plain assistant or some other persona or theme, 3 = unmistakably this archetype)
+- "fluency": 0-3, how coherent and readable they are (3 = fully fluent, 0 = gibberish or repetition)
+Also give "verdict": at most 12 words on what came out.
+
+Reply with only JSON: {{"strengths": [{{"strength": <number>, "target": <0-3>, "fluency": <0-3>}}, ...], "verdict": "..."}}"""
+
+
+def target_judge(name: str, spec: dict, entry: dict) -> dict:
+    """Re-score one steering result for the archetype itself, not just any visible change."""
+    blocks = []
+    for strength, answers in sorted(entry["samples"].items(), key=lambda kv: float(kv[0])):
+        lines = "\n".join(f"  [{i + 1}] {' '.join(a.split())[:350]}" for i, a in enumerate(answers))
+        blocks.append(f"Strength {strength}:\n{lines}")
+    verdict = json_from(chat(TARGET_JUDGE.format(name=name, description=spec["description"], steered="\n\n".join(blocks))))
+    best, best_strength = 0.0, None
+    for row in verdict.get("strengths", []):
+        value = int(row.get("target", 0)) * int(row.get("fluency", 0)) / 9
+        if value > best:
+            best, best_strength = value, float(row.get("strength"))
+    return {
+        "candidate": entry.get("name") or entry.get("latent"),
+        "target_score": round(best, 3),
+        "best_strength": best_strength,
+        "verdict": verdict.get("verdict", ""),
+        "ratings": verdict.get("strengths", []),
+    }
