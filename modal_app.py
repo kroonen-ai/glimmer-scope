@@ -501,6 +501,67 @@ def persona_scan(run: str, batch: int = 80, workers: int = 16):
     print(f"{len(picked)} persona candidates from {len(rows)} labeled features")
 
 
+@app.function(volumes=VOLUMES, gpu=GPU, timeout=2 * 3600)
+def rank_pairs(run: str, pairs: list[dict], top: int = 40, checkpoint: str = "final") -> dict:
+    """Rank features for caller-supplied {prompt, archetype, neutral} pairs and return the directions.
+
+    Nothing is written to the volume: the pairs arrive as arguments and the ranking, the held-out
+    detector check, and the blend and mean-difference directions come back as the return value.
+    """
+    import json
+    from pathlib import Path
+
+    import torch
+
+    from scope import model as glimmer
+    from scope.archetype import (
+        answer_activations,
+        blend_direction,
+        detector_accuracy,
+        mean_difference_direction,
+        rank_features,
+        split_pairs,
+    )
+    from scope.sae import TopKSAE
+
+    base = Path(f"{OUTPUT_DIR}/{run}")
+    model, tokenizer = glimmer.load()
+    sae = TopKSAE.load(base / checkpoint, device="cuda")
+    pairs = [p for p in pairs if p.get("prompt") and p.get("archetype") and p.get("neutral")]
+    train_pairs, test_pairs = split_pairs(pairs)
+
+    def activations(rows):
+        out = {"fa": [], "fn": [], "ra": [], "rn": []}
+        with torch.no_grad():
+            for pair in rows:
+                fa, ra = answer_activations(model, tokenizer, sae, pair["prompt"], pair["archetype"])
+                fn, rn = answer_activations(model, tokenizer, sae, pair["prompt"], pair["neutral"])
+                out["fa"].append(fa), out["fn"].append(fn), out["ra"].append(ra), out["rn"].append(rn)
+        return [torch.stack(out[k]) for k in ("fa", "fn", "ra", "rn")]
+
+    fa, fn, ra, rn = activations(train_pairs)
+    ranked = rank_features(fa, fn, top)
+    blend = blend_direction(sae, ranked).detach().float().cpu()
+    mean_difference = mean_difference_direction(ra, rn).detach().float().cpu()
+    detector = {"train_pairs": len(train_pairs), "held_out_pairs": len(test_pairs)}
+    if test_pairs:
+        ta, tn, tra, trn = activations(test_pairs)
+        detector["top_feature"] = detector_accuracy(ta[:, ranked[0]["latent"]], tn[:, ranked[0]["latent"]])
+        detector["mean_difference"] = detector_accuracy(tra.cpu() @ mean_difference, trn.cpu() @ mean_difference)
+    labels = {}
+    if (base / "labels.jsonl").exists():
+        labels = {r["latent"]: r["label"] for r in map(json.loads, open(base / "labels.jsonl"))}
+    for r in ranked:
+        r["feature_label"] = labels.get(r["latent"], "")
+    return {
+        "layer": sae.cfg.layer,
+        "detector": detector,
+        "features": ranked,
+        "blend": blend.tolist(),
+        "mean_difference": mean_difference.tolist(),
+    }
+
+
 @app.function(volumes=VOLUMES, timeout=600)
 def directions(run: str, latents: str, checkpoint: str = "final", name: str = "features"):
     """Save the unit decoder directions of some features, for control vectors outside Modal."""
