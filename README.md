@@ -86,6 +86,10 @@ c0fd786) teaches llama-server to mix control vectors per request:
 
 `studio/index.html` is the slider UI: one dial per vector, streaming chat,
 the mix shown on every reply, and an optional unsteered reply side by side.
+An optional system prompt (kept in the browser) goes first in both columns,
+so a comparison only differs by the steering. Presets come from
+`studio/presets.json`; a preset sets the dials and, when it has a `system` field,
+the system prompt.
 Serve it with `--path studio/` and open the server's root, or through
 llama-swap at `/upstream/glimmer-studio/` (see `llama-swap/`).
 `scripts/live_test.py` checks the server end to end.

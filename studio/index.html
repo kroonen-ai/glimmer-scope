@@ -39,6 +39,17 @@
   .group > summary .note { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 11px; opacity: .8; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .presets button { font-size: 12px; padding: 3px 10px; border-radius: 99px; }
+  .system { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .system > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; font-size: 13px; }
+  .system > summary::-webkit-details-marker { display: none; }
+  .system > summary::before { content: "▸"; font-size: 10px; color: var(--muted); transition: transform .15s; }
+  .system[open] > summary::before { transform: rotate(90deg); }
+  .system > summary .state { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .system.on > summary .state { color: var(--accent); font-weight: 600; }
+  .system textarea { display: block; width: calc(100% - 16px); margin: 0 8px; flex: none; resize: vertical; font-size: 13px; line-height: 1.45; min-height: 120px; max-height: 45vh; border-radius: 8px; }
+  .system .actions { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; font-size: 11px; color: var(--muted); }
+  .system .actions span { flex: 1; }
+  .system .actions button { font-size: 12px; padding: 2px 10px; }
   .search { width: 100%; margin-top: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
   .vec { padding: 10px 8px; border-radius: 10px; }
   .vec.on { background: var(--accent-soft); }
@@ -92,6 +103,11 @@
         <button type="button" id="clear">Clear</button>
       </div>
       <div class="presets" id="presets"></div>
+      <details class="system" id="systemBox">
+        <summary>System prompt <span class="state" id="systemState">off</span></summary>
+        <textarea id="system" placeholder="Optional. Sent first, to both columns, on every reply." aria-label="System prompt"></textarea>
+        <div class="actions"><span>Saved in this browser. Changes apply from the next reply.</span><button type="button" id="systemClear">Clear</button></div>
+      </details>
       <input class="search" id="search" type="search" placeholder="Filter dials" aria-label="Filter dials">
     </header>
     <div class="vectors" id="vectors"><div class="sub" style="padding:8px">Loading features…</div></div>
@@ -117,6 +133,23 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const state = { vectors: [], mix: {}, history: [], busy: false };
+
+// The system prompt goes first in both columns, so a comparison only differs by the steering.
+function systemPrompt() { return $("system").value.trim(); }
+function withSystem(history) {
+  const system = systemPrompt();
+  return system ? [{ role: "system", content: system }, ...history] : history.slice();
+}
+function setSystem(text) {
+  $("system").value = text;
+  updateSystemState();
+}
+function updateSystemState() {
+  const system = systemPrompt();
+  $("systemState").textContent = system ? `on · ${system.length.toLocaleString()} chars` : "off";
+  $("systemBox").classList.toggle("on", Boolean(system));
+  try { localStorage.setItem("studio-system", $("system").value); } catch {}
+}
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -286,7 +319,9 @@ async function stream(messages, steering, onDelta) {
 
 function replyBlock(container, mix, note = "") {
   const el = document.createElement("div");
-  el.innerHTML = `<div class="chips">${chipsFor(mix)}${note ? `<span class="chip plain" title="Earlier turns in this column are the steered replies, so the persona can carry over through context">${escapeHtml(note)}</span>` : ""}</div><div class="think" hidden></div><div class="body"></div><div class="stats"></div>`;
+  const system = systemPrompt();
+  const systemChip = system ? `<span class="chip plain" title="${escapeHtml(system.slice(0, 400))}">system prompt</span>` : "";
+  el.innerHTML = `<div class="chips">${chipsFor(mix)}${systemChip}${note ? `<span class="chip plain" title="Earlier turns in this column are the steered replies, so the persona can carry over through context">${escapeHtml(note)}</span>` : ""}</div><div class="think" hidden></div><div class="body"></div><div class="stats"></div>`;
   container.appendChild(el);
   return {
     update(content, reasoning) {
@@ -333,7 +368,7 @@ async function send(text) {
   } else if (!compare) {
     state.plain = null;
   }
-  const messages = state.history.slice();
+  const messages = withSystem(state.history);
   const steered = replyBlock(holder, mix);
   try {
     const r = await stream(messages, mix, steered.update);
@@ -349,7 +384,7 @@ async function send(text) {
     branch.history.push({ role: "user", content: text });
     const plain = replyBlock(holder, {}, branch.shared ? "shares earlier turns" : "");
     try {
-      const r = await stream(branch.history.slice(), {}, plain.update);
+      const r = await stream(withSystem(branch.history), {}, plain.update);
       plain.done(r.timings);
       branch.history.push({ role: "assistant", content: r.content });
     } catch (e) {
@@ -380,23 +415,38 @@ $("reset").addEventListener("click", () => {
   state.plain = null;
   $("log").innerHTML = `<div class="empty" id="empty">New chat. The dials stay where they are.</div>`;
 });
-// Tested mixes from presets.json next to this page; a preset replaces the current dials.
+// Tested mixes from presets.json next to this page. A preset replaces the current dials, and its system prompt, when it has one,
+// replaces the current system prompt.
 async function loadPresets() {
-  try {
-    const presets = await (await fetch("presets.json")).json();
+  for (const file of ["presets.json"]) {
+    let presets = [];
+    try {
+      const res = await fetch(file);
+      if (!res.ok) continue;
+      presets = await res.json();
+    } catch { continue; }
     for (const p of presets) {
-      if (!Object.keys(p.mix).every((k) => state.vectors.some((v) => v.name === k))) continue;
+      const mix = p.mix || {};
+      if (!Object.keys(mix).every((k) => state.vectors.some((v) => v.name === k))) continue;
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = p.name;
-      b.title = p.note || "";
-      b.addEventListener("click", () => { state.mix = { ...p.mix }; renderVectors(); });
+      b.title = [p.note, p.system ? "Sets a system prompt" : ""].filter(Boolean).join(" · ");
+      b.addEventListener("click", () => {
+        state.mix = { ...mix };
+        renderVectors();
+        if (typeof p.system === "string") setSystem(p.system);
+      });
       $("presets").appendChild(b);
     }
-  } catch {}
+  }
 }
 
 $("search").addEventListener("input", applyFilter);
+$("system").addEventListener("input", updateSystemState);
+$("systemClear").addEventListener("click", () => setSystem(""));
+try { $("system").value = localStorage.getItem("studio-system") || ""; } catch {}
+updateSystemState();
 loadVectors().then(loadPresets);
 </script>
 </body>
