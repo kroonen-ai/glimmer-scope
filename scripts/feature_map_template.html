@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glimmer Feature Map</title>
+<style>
+  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; --dim: rgba(120,120,120,0.10); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --dim: rgba(160,160,160,0.08); }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; z-index: 2;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .bar h1 { font-size: 15px; margin: 0 6px 0 0; }
+  .bar .stat { color: var(--muted); font-size: 12px; }
+  input[type=search] { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; min-width: 220px; }
+  select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .tip { position: fixed; pointer-events: none; z-index: 3; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+         padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
+  .tip b { font-size: 13px; }
+  .tip .meta { color: var(--muted); margin-top: 3px; }
+  .card { position: fixed; right: 12px; bottom: 12px; z-index: 2; width: min(380px, calc(100% - 24px)); max-height: 46vh; overflow: auto;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
+  .card h2 { font-size: 14px; margin: 0 0 6px; }
+  .card ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
+  .card .meta { color: var(--muted); font-size: 12px; }
+  .card button { float: right; }
+  @media (max-width: 640px) { input[type=search] { min-width: 0; flex: 1; } }
+</style>
+</head>
+<body>
+<canvas id="map" aria-label="Map of SAE features"></canvas>
+<div class="bar">
+  <h1>Glimmer feature map</h1>
+  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features">
+  <select id="color" aria-label="Color by">
+    <option value="region">Color: region</option>
+    <option value="kind">Color: kind</option>
+    <option value="score">Color: steering score</option>
+    <option value="safety">Color: safety-relevant</option>
+  </select>
+  <label class="check"><input type="checkbox" id="names" checked> Region names</label>
+  <button type="button" id="reset">Reset view</button>
+  <span class="stat" id="stat"></span>
+</div>
+<div class="tip" id="tip"></div>
+<div class="card" id="card"></div>
+<script>
+const DATA = /*DATA*/null;
+const P = DATA.points, R = DATA.regions;
+const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
+const tip = document.getElementById("tip"), card = document.getElementById("card");
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const hue = (i) => (i * 137.508) % 360;
+const regionColor = R.map((r) => `hsl(${hue(r.id)}, 62%, 52%)`);
+const KINDS = { concept: "#7a4cf5", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f" };
+const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
+  power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
+let xs = P.map((p) => p.x), ys = P.map((p) => p.y);
+const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+let view = null, query = "", matches = null;
+
+function fit() {
+  const w = canvas.clientWidth, h = canvas.clientHeight, pad = 60;
+  const s = Math.min((w - pad * 2) / (maxX - minX), (h - pad * 2 - 50) / (maxY - minY));
+  view = { s, ox: w / 2 - s * (minX + maxX) / 2, oy: h / 2 + 25 - s * (minY + maxY) / 2 };
+}
+const sx = (x) => view.ox + view.s * x, sy = (y) => view.oy + view.s * y;
+
+function colorOf(p) {
+  const mode = document.getElementById("color").value;
+  if (mode === "kind") return KINDS[p.kind] || "#888";
+  if (mode === "score") return p.score == null ? css("--dim") : `hsl(${260 - 140 * p.score}, 75%, ${45 + 10 * p.score}%)`;
+  if (mode === "safety") return p.safety ? SAFETY[p.safety] : css("--dim");
+  return regionColor[p.region];
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  const r = Math.max(1.2, Math.min(4, view.s * 0.06));
+  const dim = css("--dim");
+  for (const p of P) {
+    const lit = !matches || matches.has(p.id);
+    ctx.fillStyle = lit ? colorOf(p) : dim;
+    ctx.fillRect(sx(p.x) - r / 2, sy(p.y) - r / 2, r, r);
+  }
+  if (matches) {
+    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1;
+    for (const p of P) if (matches.has(p.id)) { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r + 2.5, 0, 6.283); ctx.stroke(); }
+  }
+  if (document.getElementById("names").checked && !matches) {
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+    for (const reg of R) {
+      if (reg.size < 120 && view.s < 40) continue;
+      const x = sx(reg.x), y = sy(reg.y);
+      ctx.lineWidth = 3; ctx.strokeStyle = css("--bg"); ctx.strokeText(reg.name, x, y);
+      ctx.fillStyle = css("--ink"); ctx.fillText(reg.name, x, y);
+    }
+  }
+  const tested = P.filter((p) => p.score != null).length;
+  document.getElementById("stat").textContent = `${P.length.toLocaleString()} features · ${R.length} regions · ${tested.toLocaleString()} steering-tested` + (matches ? ` · ${matches.size} match` : "");
+}
+
+// nearest point under the cursor, through a coarse grid
+let grid = null;
+function buildGrid() {
+  grid = new Map();
+  for (const p of P) { const key = `${Math.floor(sx(p.x) / 12)},${Math.floor(sy(p.y) / 12)}`; (grid.get(key) || grid.set(key, []).get(key)).push(p); }
+}
+function nearest(mx, my) {
+  let best = null, bd = 64;
+  const gx = Math.floor(mx / 12), gy = Math.floor(my / 12);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const p of grid.get(`${gx + i},${gy + j}`) || []) {
+    if (matches && !matches.has(p.id)) continue;
+    const d = (sx(p.x) - mx) ** 2 + (sy(p.y) - my) ** 2; if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function describe(p) {
+  const reg = R[p.region];
+  return `<b>${esc(p.label)}</b><div class="meta">feature ${p.id} · ${esc(p.kind || "")} · region: ${esc(reg.name)}` +
+    (p.score != null ? ` · steering ${p.score}` : "") + (p.safety ? ` · flagged: ${esc(p.safety)}` : "") + `</div>`;
+}
+
+let drag = null;
+canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false }; canvas.classList.add("dragging"); });
+window.addEventListener("mouseup", (e) => {
+  canvas.classList.remove("dragging");
+  if (drag && !drag.moved) { const p = nearest(e.clientX, e.clientY); if (p) showRegion(p); }
+  if (drag && drag.moved) buildGrid();
+  drag = null;
+});
+window.addEventListener("mousemove", (e) => {
+  if (drag) {
+    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) drag.moved = true;
+    tip.style.display = "none"; draw(); return;
+  }
+  const p = nearest(e.clientX, e.clientY);
+  if (!p) { tip.style.display = "none"; return; }
+  tip.innerHTML = describe(p); tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 360) + "px"; tip.style.top = (e.clientY + 14) + "px";
+});
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  view.ox = e.clientX - (e.clientX - view.ox) * f; view.oy = e.clientY - (e.clientY - view.oy) * f; view.s *= f;
+  draw(); buildGrid();
+}, { passive: false });
+
+function showRegion(p) {
+  const reg = R[p.region];
+  const members = P.filter((q) => q.region === reg.id);
+  const top = members.filter((q) => q.score != null).sort((a, b) => b.score - a.score).slice(0, 8);
+  const sample = members.slice(0, 400).sort(() => 0.5 - Math.random()).slice(0, 10);
+  card.innerHTML = `<button type="button" id="close">Close</button><h2>${esc(reg.name)}</h2>
+    <div class="meta">${members.length} features · clicked: feature ${p.id}, ${esc(p.label)}</div>
+    ${top.length ? `<div class="meta" style="margin-top:8px">Best steering here</div><ul>${top.map((q) => `<li>${q.id} ${esc(q.label)} (${q.score})</li>`).join("")}</ul>` : ""}
+    <div class="meta" style="margin-top:8px">A few members</div><ul>${sample.map((q) => `<li>${q.id} ${esc(q.label)}</li>`).join("")}</ul>`;
+  card.style.display = "block";
+  document.getElementById("close").onclick = () => { card.style.display = "none"; };
+}
+
+document.getElementById("q").addEventListener("input", (e) => {
+  query = e.target.value.trim().toLowerCase();
+  matches = query ? new Set(P.filter((p) => p.label.toLowerCase().includes(query) || String(p.id) === query).map((p) => p.id)) : null;
+  draw();
+});
+document.getElementById("color").addEventListener("change", draw);
+document.getElementById("names").addEventListener("change", draw);
+document.getElementById("reset").addEventListener("click", () => { fit(); draw(); buildGrid(); });
+window.addEventListener("resize", () => { fit(); draw(); buildGrid(); });
+fit(); draw(); buildGrid();
+</script>
+</body>
+</html>
