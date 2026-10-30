@@ -35,12 +35,12 @@ def describe(row: dict, n_examples: int = 8) -> str:
     return "\n".join(lines)
 
 
-def candidates(catalog_path: str, min_freq: float = 1e-6, max_freq: float = 1e-2) -> Iterator[dict]:
+def candidates(catalog_path: str, min_freq: float = 1e-6, max_freq: float = 1e-2, min_examples: int = 4) -> Iterator[dict]:
     """Features that fire often enough to judge and rarely enough to mean something."""
     with gzip.open(catalog_path, "rt") as f:
         for line in f:
             row = json.loads(line)
-            if min_freq <= row["freq"] <= max_freq and len(row["examples"]) >= 4:
+            if min_freq <= row["freq"] <= max_freq and len(row["examples"]) >= min_examples:
                 yield row
 
 
@@ -65,23 +65,47 @@ def label_batch(rows: list[dict]) -> list[dict]:
     return labeled
 
 
-def label_catalog(catalog_path: str, out_path: str, limit: int, batch: int = 10, workers: int = 16, done: set | None = None) -> int:
+def label_catalog(
+    catalog_path: str,
+    out_path: str,
+    limit: int,
+    batch: int = 10,
+    workers: int = 16,
+    done: set | None = None,
+    failures_path: str | None = None,
+    filters: dict | None = None,
+) -> int:
+    """Label in batches; every feature a batch could not name goes to ``failures_path`` with the reason."""
     done = done or set()
-    rows = [r for r in candidates(catalog_path) if r["latent"] not in done][:limit]
+    rows = [r for r in candidates(catalog_path, **(filters or {})) if r["latent"] not in done][:limit]
     batches = [rows[i : i + batch] for i in range(0, len(rows), batch)]
     written = 0
+    failures = open(failures_path, "a") if failures_path else None
+
+    def failed(latents: list[int], reason: str) -> None:
+        if failures:
+            failures.write(json.dumps({"latents": latents, "reason": reason[:400]}) + "\n")
+            failures.flush()
+
     with open(out_path, "a") as out, ThreadPoolExecutor(workers) as pool:
-        futures = [pool.submit(label_batch, b) for b in batches]
+        futures = {pool.submit(label_batch, b): b for b in batches}
         for future in as_completed(futures):
+            asked = [r["latent"] for r in futures[future]]
             try:
                 labeled = future.result()
             except Exception as error:  # one bad batch must not lose the rest
                 print(f"batch failed: {error}", flush=True)
+                failed(asked, str(error))
                 continue
             for item in labeled:
                 out.write(json.dumps(item) + "\n")
             out.flush()
+            named = {item["latent"] for item in labeled}
+            if missing := [latent for latent in asked if latent not in named]:
+                failed(missing, "Muse Spark's reply left these features out")
             written += len(labeled)
             if written and written % 500 < batch:
                 print(f"labeled {written}", flush=True)
+    if failures:
+        failures.close()
     return written
