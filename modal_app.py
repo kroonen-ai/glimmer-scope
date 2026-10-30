@@ -201,17 +201,22 @@ meta_secret = modal.Secret.from_name(os.environ.get("GLIMMER_META_SECRET", "meta
 
 
 @app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=8 * 3600)
-def label(run: str, limit: int = 20000, workers: int = 16):
-    """Muse Spark names the catalog's features; resumes where it stopped."""
+def label(run: str, limit: int = 20000, workers: int = 16, out_name: str = "labels.jsonl"):
+    """Muse Spark names the catalog's features; resumes where it stopped.
+
+    ``out_name`` writes to another file (merged into labels.jsonl later), so a second run
+    never shares a file with one still going; features named in either file are skipped.
+    """
     import json
 
     from scope.label import label_catalog
 
     base = f"{OUTPUT_DIR}/{run}"
-    out = f"{base}/labels.jsonl"
+    out = f"{base}/{out_name}"
     done = set()
-    if os.path.exists(out):
-        done = {json.loads(line)["latent"] for line in open(out)}
+    for path in {f"{base}/labels.jsonl", out}:
+        if os.path.exists(path):
+            done |= {json.loads(line)["latent"] for line in open(path)}
     written = label_catalog(f"{base}/catalog.jsonl.gz", out, limit, workers=workers, done=done)
     scope_volume.commit()
     print(f"labeled {written} now, {len(done) + written} in total")
