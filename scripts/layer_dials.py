@@ -7,6 +7,10 @@ every layer. Writes <out>/*.gguf and <out>/entries.json, to merge into the libra
 steering.json.
 
     python scripts/layer_dials.py runs/layer36-64k-k64 --median 412.3 --out dials-L36
+
+--personas exports the persona pass instead (steerability-personas.jsonl): full-score personas,
+named after the persona Muse Spark saw in them, go to "untested" like layer 24's discovery pass;
+dark or explicit ones go to the private "research" group and flagged ones to "safety".
 """
 import argparse
 import json
@@ -25,11 +29,38 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40].rstrip("-")
 
 
+# Personas kept out of the open groups: anything dark, explicit, criminal or manipulative.
+from scope.safety import PRIVATE_PERSONAS as PRIVATE  # noqa: E402  (pattern kept private)
+
+
+def persona_entries(run: Path, layer: int, flagged: dict) -> dict:
+    personas = {r["latent"]: r for r in map(json.loads, open(run / "personas.jsonl"))}
+    entries = {}
+    for r in map(json.loads, open(run / "steerability-personas.jsonl")):
+        if r["score"] < 0.99:
+            continue
+        latent = r["latent"]
+        persona = personas.get(latent, {}).get("persona") or r["label"]
+        label = personas.get(latent, {}).get("label") or r["label"]
+        if latent in flagged:
+            group = "safety"
+        elif PRIVATE.search(f"{persona} {label} {r.get('observed') or ''}"):
+            group = "research"
+        else:
+            group = "untested"
+        entries[f"{slug(persona)}-L{layer}-{latent}"] = {
+            "label": persona[:1].upper() + persona[1:], "description": r.get("observed") or "",
+            "default": r.get("best_strength") or 0.5, "layer": layer, "group": group,
+            "source": f"layer {layer} SAE feature {latent} (persona pass: {label})"}
+    return entries
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("run", type=Path)
     parser.add_argument("--median", type=float, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--personas", action="store_true")
     args = parser.parse_args()
     run = args.run.expanduser()
     layer = json.loads((run / "final" / "cfg.json").read_text())["layer"]
@@ -48,6 +79,18 @@ def main():
 
     W = decoder(run / "final" / "sae.safetensors")
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.personas:
+        entries = persona_entries(run, layer, flagged)
+        for name, entry in entries.items():
+            latent = int(name.rsplit("-", 1)[1])
+            direction = np.asarray(W[latent], dtype=np.float32)
+            write_control_vector(args.out / f"{name}.gguf", layer, direction / np.linalg.norm(direction) * args.median)
+        (args.out / "entries.json").write_text(json.dumps(entries, indent=2))
+        groups = {}
+        for e in entries.values():
+            groups[e["group"]] = groups.get(e["group"], 0) + 1
+        print(f"layer {layer}: {len(entries)} persona dials {groups} at median {args.median}")
+        return
     entries = {}
     for latent in sorted(set(scored) | set(flagged)):
         r = scored.get(latent)
