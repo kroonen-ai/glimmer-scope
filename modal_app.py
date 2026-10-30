@@ -656,3 +656,38 @@ def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
         print(f"{name:18} best {str(best.get('candidate')):16} {best.get('target_score')} x{best.get('best_strength')}  {best.get('verdict', '')}")
     (base / f"targets-{checkpoint}.json").write_text(json.dumps(summary, indent=2))
     scope_volume.commit()
+
+
+@app.function(secrets=[meta_secret], cpu=2, timeout=3600)
+def judge_many(jobs: list[dict], workers: int = 8) -> list[dict]:
+    """Muse Spark grades steered texts generated elsewhere (a local Q4 model), with the sweep's judge.
+
+    Each job is {"feature": {latent, name, label}, "contexts": [...], "baseline": [...],
+    "steered": {strength: [...]}}; a job the judge could not grade comes back with its "error".
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from scope.steerability import judge
+
+    def one(job):
+        try:
+            steered = {float(s): answers for s, answers in job["steered"].items()}
+            return judge(job["feature"], job["contexts"], job["baseline"], steered)
+        except Exception as error:
+            return {"latent": job["feature"].get("latent"), "name": job["feature"].get("name"), "error": str(error)[:400]}
+
+    with ThreadPoolExecutor(workers) as pool:
+        return list(pool.map(one, jobs))
+
+
+@app.local_entrypoint()
+def judge_file(path: str, out: str):
+    """Grade a local jobs file with judge_many and write the verdicts next to it."""
+    import json
+
+    jobs = [json.loads(line) for line in open(path)]
+    results = judge_many.remote(jobs)
+    with open(out, "w") as f:
+        for row in results:
+            f.write(json.dumps(row) + "\n")
+    print(f"judged {sum('error' not in r for r in results)} of {len(jobs)}, {sum('error' in r for r in results)} failed")
