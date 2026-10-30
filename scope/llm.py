@@ -17,7 +17,7 @@ ENDPOINT = "https://api.meta.ai/v1/chat/completions"
 MODEL = os.environ.get("JUDGE_MODEL", "muse-spark-1.3-contributor")
 
 
-def chat(prompt: str, max_tokens: int = 4000, effort: str = "low", retries: int = 6) -> str:
+def chat(prompt: str, max_tokens: int = 4000, effort: str = "low", retries: int = 12) -> str:
     body = json.dumps(
         {
             "model": MODEL,
