@@ -331,6 +331,7 @@ async function stream(messages, steering, onDelta) {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { msg = (await res.json()).error?.message || msg; } catch {}
+    if (BENT.test(msg)) return streamRaw(messages, steering, onDelta);
     throw new Error(msg);
   }
   const reader = res.body.getReader();
@@ -348,6 +349,13 @@ async function stream(messages, steering, onDelta) {
       const data = line.slice(5).trim();
       if (data === "[DONE]") continue;
       const chunk = JSON.parse(data);
+      if (chunk.error) {
+        if (BENT.test(chunk.error.message || "")) {
+          reader.cancel();
+          return streamRaw(messages, steering, onDelta);
+        }
+        throw new Error(chunk.error.message || "server error");
+      }
       if (chunk.timings) timings = chunk.timings;
       const d = chunk.choices?.[0]?.delta || {};
       if (d.content) content += d.content;
@@ -356,6 +364,54 @@ async function stream(messages, steering, onDelta) {
     }
   }
   return { content, reasoning, timings };
+}
+
+// A strong dial can bend Glimmer's own reply header (a language dial translates "to=user"), and then
+// the chat endpoint cannot parse the reply. Ask for the raw text instead and split the channels here.
+const BENT = /does not match the expected .*format/i;
+
+function splitChannels(raw) {
+  let content = "", reasoning = "";
+  for (const seg of raw.split("<|start|>")) {
+    const at = seg.indexOf("<|message|>");
+    if (at < 0) continue;
+    const text = seg.slice(at + "<|message|>".length).replace(/<\|[a-z_]+\|>/g, "").trim();
+    if (/user/.test(seg.slice(0, at))) content += (content ? "\n\n" : "") + text;
+    else reasoning += (reasoning ? "\n\n" : "") + text;
+  }
+  return { content, reasoning };
+}
+
+async function streamRaw(messages, steering, onDelta) {
+  const headers = { "Content-Type": "application/json" };
+  const tpl = await fetch("apply-template", { method: "POST", headers,
+    body: JSON.stringify({ messages, chat_template_kwargs: { reasoning_strength: $("effort").value } }) });
+  if (!tpl.ok) throw new Error(`HTTP ${tpl.status}`);
+  const { prompt } = await tpl.json();
+  const res = await fetch("completion", { method: "POST", headers,
+    body: JSON.stringify({ prompt, stream: true, n_predict: 1500, steering }) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "", raw = "", timings = null, parts = { content: "", reasoning: "" };
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      const chunk = JSON.parse(line.slice(5).trim());
+      if (chunk.error) throw new Error(chunk.error.message || "server error");
+      if (chunk.timings) timings = chunk.timings;
+      raw += chunk.content || "";
+      parts = splitChannels(raw);
+      onDelta(parts.content, parts.reasoning);
+    }
+  }
+  return { ...parts, timings, bent: true };
 }
 
 function replyBlock(container, mix, note = "") {
@@ -372,8 +428,9 @@ function replyBlock(container, mix, note = "") {
       el.querySelector(".body").innerHTML = render(content || "…");
       scrollDown();
     },
-    done(timings) {
-      if (timings?.predicted_per_second) el.querySelector(".stats").textContent = `${timings.predicted_n} tokens · ${timings.predicted_per_second.toFixed(0)} tok/s`;
+    done(timings, bent) {
+      const note = bent ? " · steering bent the reply format, shown raw" : "";
+      if (timings?.predicted_per_second) el.querySelector(".stats").textContent = `${timings.predicted_n} tokens · ${timings.predicted_per_second.toFixed(0)} tok/s${note}`;
     },
     fail(e) { el.querySelector(".body").innerHTML = `<p class="err">${escapeHtml(String(e.message || e))}</p>`; },
   };
@@ -413,7 +470,7 @@ async function send(text) {
   const steered = replyBlock(holder, mix);
   try {
     const r = await stream(messages, mix, steered.update);
-    steered.done(r.timings);
+    steered.done(r.timings, r.bent);
     // the conversation continues from the steered reply
     state.history.push({ role: "assistant", content: r.content });
   } catch (e) {
@@ -426,7 +483,7 @@ async function send(text) {
     const plain = replyBlock(holder, {}, branch.shared ? "shares earlier turns" : "");
     try {
       const r = await stream(withSystem(branch.history), {}, plain.update);
-      plain.done(r.timings);
+      plain.done(r.timings, r.bent);
       branch.history.push({ role: "assistant", content: r.content });
     } catch (e) {
       plain.fail(e);
