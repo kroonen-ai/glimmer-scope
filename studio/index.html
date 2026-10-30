@@ -51,6 +51,11 @@
   .system .actions span { flex: 1; }
   .system .actions button { font-size: 12px; padding: 2px 10px; }
   .search { width: 100%; margin-top: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .layers { display: none; gap: 6px; margin-top: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+  .layers.on { display: flex; flex-wrap: wrap; }
+  .layers button { font-size: 12px; padding: 2px 10px; border-radius: 99px; }
+  .layers button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .vec .layer { font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; }
   .vec { padding: 10px 8px; border-radius: 10px; }
   .vec.on { background: var(--accent-soft); }
   .vec .top { display: flex; align-items: baseline; gap: 8px; }
@@ -97,7 +102,7 @@
   <aside>
     <header>
       <h1>Glimmer Studio</h1>
-      <div class="sub">Muse Glimmer 30B with features from its own layer 24 added back in, live, per reply.</div>
+      <div class="sub" id="tagline">Muse Glimmer 30B with features from its own layer 24 added back in, live, per reply.</div>
       <div class="mix">
         <div class="summary" id="summary">No steering</div>
         <button type="button" id="clear">Clear</button>
@@ -109,6 +114,7 @@
         <div class="actions"><span>Saved in this browser. Changes apply from the next reply.</span><button type="button" id="systemClear">Clear</button></div>
       </details>
       <input class="search" id="search" type="search" placeholder="Filter dials" aria-label="Filter dials">
+      <div class="layers" id="layers" role="group" aria-label="Show dials from layer"></div>
     </header>
     <div class="vectors" id="vectors"><div class="sub" style="padding:8px">Loading features…</div></div>
   </aside>
@@ -132,7 +138,8 @@
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { vectors: [], mix: {}, history: [], busy: false };
+const state = { vectors: [], mix: {}, history: [], busy: false, layers: [], layer: "all" };
+try { const saved = localStorage.getItem("studio-layer"); if (saved) state.layer = saved === "all" ? "all" : +saved; } catch {}
 
 // The system prompt goes first in both columns, so a comparison only differs by the steering.
 function systemPrompt() { return $("system").value.trim(); }
@@ -194,8 +201,12 @@ function chipsFor(mix) {
 function updateSummary() {
   const mix = activeMix();
   const n = Object.keys(mix).length;
-  $("summary").textContent = n ? Object.entries(mix).map(([k, v]) => `${state.vectors.find((x) => x.name === k)?.label || k} ${v.toFixed(2)}`).join(" + ") : "No steering";
+  $("summary").textContent = n ? Object.entries(mix).map(([k, v]) => `${state.vectors.find((x) => x.name === k)?.label || k}${layerTag(k)} ${v.toFixed(2)}`).join(" + ") : "No steering";
 }
+
+// dials without a layer field are layer 24, where the first SAE sits
+const layerOf = (v) => v.layer ?? 24;
+const layerTag = (name) => { const v = state.vectors.find((x) => x.name === name); return v && state.layers.length > 1 ? ` L${layerOf(v)}` : ""; };
 
 const GROUPS = [
   ["companion", "Companions", ""],
@@ -204,8 +215,8 @@ const GROUPS = [
   ["mood", "Moods and styles", ""],
   ["discovered", "Discovered", "found by scanning every feature"],
   ["untested", "Discovered, untested", "single features, strengths from one-reply tests"],
-  ["found", "Found, full score", "sweep 2: the judge saw the concept clearly and the text stayed fluent"],
-  ["found-partial", "Found, partial", "sweep 2: score 0.67, the concept shows but weaker or less fluent"],
+  ["found", "Found, full score", "steering test: the judge saw the concept clearly and the text stayed fluent"],
+  ["found-partial", "Found, partial", "steering test: score 0.67, the concept shows but weaker or less fluent"],
   ["research", "Research", "private, for interpretability work"],
   ["safety", "Safety research", "flagged safety-relevant features; private, never for demos"],
 ];
@@ -223,8 +234,10 @@ function vectorRow(v) {
   const row = document.createElement("div");
   row.className = "vec" + (value > 0 ? " on" : "");
   row.dataset.search = `${v.name} ${v.label || ""} ${v.description || ""}`.toLowerCase();
+  row.dataset.layer = layerOf(v);
+  const tag = state.layers.length > 1 ? `<span class="layer" title="Added after layer ${layerOf(v)}">L${layerOf(v)}</span>` : "";
   row.innerHTML = `
-    <div class="top"><span class="name" title="Click for the suggested strength">${escapeHtml(v.label || v.name)}</span><span class="val">${value ? value.toFixed(2) : "off"}</span></div>
+    <div class="top"><span class="name" title="Click for the suggested strength">${escapeHtml(v.label || v.name)}</span>${tag}<span class="val">${value ? value.toFixed(2) : "off"}</span></div>
     <div class="desc">${escapeHtml(v.description || "")}</div>
     <input type="range" min="0" max="1" step="0.05" value="${value}" aria-label="${escapeHtml(v.label || v.name)} strength">
     <div class="src">${escapeHtml(v.source || "")}${v.default ? ` · suggested ${v.default}` : ""}</div>`;
@@ -262,9 +275,33 @@ function renderVectors() {
   updateSummary();
 }
 
+function renderLayers() {
+  const box = $("layers");
+  state.layers = [...new Set(state.vectors.map(layerOf))].sort((a, b) => a - b);
+  if (!state.layers.includes(state.layer)) state.layer = "all";
+  box.classList.toggle("on", state.layers.length > 1);
+  $("tagline").textContent = `Muse Glimmer 30B with features from its own ${state.layers.length > 1 ? `layers ${state.layers.join(", ").replace(/, (\d+)$/, " and $1")}` : `layer ${state.layers[0] ?? 24}`} added back in, live, per reply.`;
+  box.innerHTML = "<span>Layer</span>";
+  for (const value of ["all", ...state.layers]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = value === "all" ? "All" : value;
+    b.setAttribute("aria-pressed", String(state.layer === value));
+    b.addEventListener("click", () => {
+      state.layer = value;
+      try { localStorage.setItem("studio-layer", String(value)); } catch {}
+      renderLayers();
+      applyFilter();
+    });
+    box.appendChild(b);
+  }
+}
+
 function applyFilter() {
   const q = ($("search").value || "").trim().toLowerCase();
-  for (const row of document.querySelectorAll(".vec")) row.hidden = q && !row.dataset.search.includes(q);
+  for (const row of document.querySelectorAll(".vec")) {
+    row.hidden = (q && !row.dataset.search.includes(q)) || (state.layer !== "all" && +row.dataset.layer !== state.layer);
+  }
   for (const group of document.querySelectorAll(".group")) {
     const visible = [...group.querySelectorAll(".vec")].some((r) => !r.hidden);
     group.hidden = !visible;
@@ -278,6 +315,7 @@ async function loadVectors() {
     const data = await res.json();
     state.vectors = data.vectors || [];
     if (!state.vectors.length) throw new Error("this server has no --steering-dir");
+    renderLayers();
     renderVectors();
   } catch (e) {
     $("vectors").innerHTML = `<div class="sub err" style="padding:8px">Could not load features: ${escapeHtml(String(e.message || e))}</div>`;

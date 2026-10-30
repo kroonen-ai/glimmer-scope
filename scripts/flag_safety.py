@@ -1,7 +1,7 @@
 """Flag safety-relevant SAE features for study (never as turn-up dials).
 
 Categories follow the safety-relevant features section of Anthropic's
-Scaling Monosemanticity (2024). Writes results/safety-features.json and .md
+Scaling Monosemanticity (2024). Writes results/safety-features-L<layer>.json and .md
 (results/ is gitignored). Re-run after a sweep to attach steering scores.
 
     python scripts/flag_safety.py runs/layer24-64k-k64 [steerability.jsonl ...]
@@ -17,6 +17,7 @@ CATEGORIES = {}  # keyword lists kept private, see scope/safety.py
 
 def main():
     base = Path(sys.argv[1])
+    layer = json.loads((base / "final" / "cfg.json").read_text())["layer"]
     labels = [json.loads(line) for line in open(base / "labels.jsonl")]
     scores = {}
     for path in [base / "steerability.jsonl", base / "steerability-personas.jsonl", *map(Path, sys.argv[2:])]:
@@ -35,8 +36,8 @@ def main():
                 })
     out_dir = Path(__file__).resolve().parent.parent / "results"
     out_dir.mkdir(exist_ok=True)
-    (out_dir / "safety-features.json").write_text(json.dumps(flagged, indent=1))
-    lines = ["# Safety-relevant features (layer 24, 64k SAE)", "",
+    (out_dir / f"safety-features-L{layer}.json").write_text(json.dumps(flagged, indent=1))
+    lines = [f"# Safety-relevant features (layer {layer}, 64k SAE)", "",
              "For study only: as detectors and by subtracting them. Never as turn-up dials in the Studio.", ""]
     for name, items in sorted(flagged.items(), key=lambda kv: -len(kv[1])):
         tested = [i for i in items if i["steering"]]
@@ -46,7 +47,7 @@ def main():
             tag = f" | steer {s['score']}" if s else ""
             lines.append(f"- {i['latent']}: {i['label']} ({i['kind']}){tag}")
         lines.append("")
-    (out_dir / "safety-features.md").write_text("\n".join(lines))
+    (out_dir / f"safety-features-L{layer}.md").write_text("\n".join(lines))
     print({name: len(items) for name, items in sorted(flagged.items(), key=lambda kv: -len(kv[1]))})
 
 

@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glimmer Layer Atlas</title>
+<style>
+  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; --up: #e5484d; --down: #0090ff;
+          --dim: rgba(120,120,120,0.10); --plane: rgba(122,76,245,0.035); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --up: #ff6369; --down: #52a9ff;
+                                      --dim: rgba(160,160,160,0.08); --plane: rgba(165,135,255,0.05); }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; z-index: 2;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .bar h1 { font-size: 15px; margin: 0 4px 0 0; }
+  .bar .stat { color: var(--muted); font-size: 12px; }
+  input[type=search] { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; min-width: 200px; }
+  select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+  label.check, label.slide { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  label.slide b { color: var(--ink); font-weight: 600; min-width: 2.2em; font-variant-numeric: tabular-nums; }
+  input[type=range] { accent-color: var(--accent); width: 110px; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  canvas.dragging { cursor: grabbing; }
+  .tip { position: fixed; pointer-events: none; z-index: 3; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+         padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
+  .tip b { font-size: 13px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .card { position: fixed; right: 12px; bottom: 12px; z-index: 2; width: min(400px, calc(100% - 24px)); max-height: 52vh; overflow: auto;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; }
+  .card h3 { font-size: 12px; margin: 10px 0 2px; color: var(--muted); font-weight: 600; }
+  .card ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
+  .card li { padding: 2px 0; display: flex; gap: 8px; }
+  .card li .cos { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 2.6em; }
+  .card li a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; cursor: pointer; }
+  .card li a:hover { text-decoration-color: var(--accent); }
+  .card .close { float: right; }
+  .legend { position: fixed; left: 12px; bottom: 12px; z-index: 2; font-size: 12px; color: var(--muted); background: var(--panel);
+            border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin: 0 4px 0 8px; }
+  @media (max-width: 640px) { input[type=search] { min-width: 0; flex: 1; } .legend { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="map" aria-label="Stacked maps of SAE features at several layers"></canvas>
+<div class="bar">
+  <h1>Glimmer atlas</h1>
+  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features">
+  <label class="slide">Layer <input type="range" id="layer" min="0" step="1" aria-label="Layer"> <b id="layerName"></b></label>
+  <label class="slide">Stack <input type="range" id="spread" min="0" max="100" value="0" aria-label="Stack the layers"></label>
+  <select id="color" aria-label="Color by">
+    <option value="region">Color: region</option>
+    <option value="layer">Color: layer</option>
+    <option value="score">Color: steering score</option>
+    <option value="safety">Color: safety-relevant</option>
+  </select>
+  <label class="check"><input type="checkbox" id="names" checked> Region names</label>
+  <button type="button" id="reset">Reset view</button>
+  <span class="stat" id="stat"></span>
+</div>
+<div class="tip" id="tip"></div>
+<div class="card" id="card"></div>
+<div class="legend" id="legend"></div>
+<script>
+const DATA = /*DATA*/null;
+const M = DATA.maps, NL = M.length;
+M.forEach((m, li) => m.points.forEach((p) => { p.li = li; }));
+const byId = M.map((m) => new Map(m.points.map((p) => [p.i, p])));
+const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
+const tip = document.getElementById("tip"), card = document.getElementById("card");
+const layerEl = document.getElementById("layer"), spreadEl = document.getElementById("spread"), colorEl = document.getElementById("color");
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hue = (i) => (i * 137.508) % 360;
+const LAYER_HUES = [200, 275, 340, 30, 140];
+const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
+  power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
+
+layerEl.max = NL - 1;
+layerEl.value = Math.floor(NL / 2);
+let all = M.flatMap((m) => m.points);
+const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
+const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
+const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, half = Math.max(maxX - minX, maxY - minY) / 2;
+let view = { s: 1, ox: 0, oy: 0 }, matches = null, selected = null, grid = null;
+
+const active = () => +layerEl.value;
+const spread = () => +spreadEl.value / 100;
+
+// plane coordinates in [-1, 1], then the stacked transform: rotate, tilt, lift deeper layers up
+function place(u, v, li, t) {
+  if (t > 0) {
+    const a = t * 0.6, ca = Math.cos(a), sa = Math.sin(a);
+    [u, v] = [u * ca - v * sa, u * sa + v * ca];
+    v = v * (1 - 0.62 * t) - (li - (NL - 1) / 2) * t * 1.2;
+  }
+  return [u, v];
+}
+function project(p, t = spread()) {
+  const [u, v] = place((p.x - cx) / half, (p.y - cy) / half, p.li, t);
+  return [view.ox + view.s * u, view.oy + view.s * v];
+}
+const visibleLayers = () => (spread() > 0 ? M.map((_, li) => li) : [active()]);
+
+function fit() {
+  const t = spread(), w = canvas.clientWidth, h = canvas.clientHeight, top = 70, pad = 40;
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const li of visibleLayers()) for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const [a, b] = place(u, v, li, t);
+    x0 = Math.min(x0, a); x1 = Math.max(x1, a); y0 = Math.min(y0, b); y1 = Math.max(y1, b);
+  }
+  const s = Math.min((w - pad * 2) / (x1 - x0), (h - top - pad * 2) / (y1 - y0));
+  view = { s, ox: w / 2 - s * (x0 + x1) / 2, oy: top + (h - top) / 2 - s * (y0 + y1) / 2 };
+}
+
+function colorOf(p) {
+  const mode = colorEl.value;
+  if (mode === "layer") return `hsl(${LAYER_HUES[p.li % LAYER_HUES.length]}, 70%, 55%)`;
+  if (mode === "score") return p.s == null ? css("--dim") : `hsl(${260 - 140 * p.s}, 75%, ${45 + 10 * p.s}%)`;
+  if (mode === "safety") return p.f ? SAFETY[p.f] : css("--dim");
+  return `hsl(${hue(p.r + p.li * 41)}, 62%, 52%)`;
+}
+
+function partnerPoint(p, dir, j) {
+  const li = p.li + (dir === "u" ? 1 : -1);
+  return li >= 0 && li < NL ? byId[li].get(j) : null;
+}
+// the selected feature's lineage: all shown partners one layer away, then the best partner onward
+function lineage(p) {
+  const edges = [];
+  for (const dir of ["u", "d"]) {
+    for (const [j, c] of p[dir] || []) { const q = partnerPoint(p, dir, j); if (q) edges.push([p, q, c]); }
+    let cur = p;
+    for (;;) {
+      const best = (cur[dir] || []).map(([j, c]) => [partnerPoint(cur, dir, j), c]).find(([q]) => q);
+      if (!best || best[0] === p) break;
+      if (cur !== p) edges.push([cur, best[0], best[1]]);
+      cur = best[0];
+    }
+  }
+  return edges;
+}
+
+function draw() {
+  const dpr = window.devicePixelRatio || 1, t = spread();
+  canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  const r = Math.max(1.2, Math.min(4, view.s * 0.004)), dim = css("--dim"), ink = css("--ink");
+  grid = new Map();
+  for (const li of visibleLayers()) {
+    const focus = li === active();
+    if (t > 0) {
+      ctx.beginPath();
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([u, v], n) => {
+        const [a, b] = place(u * 1.04, v * 1.04, li, t); const X = view.ox + view.s * a, Y = view.oy + view.s * b;
+        n ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+      });
+      ctx.closePath(); ctx.fillStyle = css("--plane"); ctx.fill();
+      ctx.strokeStyle = focus ? css("--accent") : css("--line"); ctx.lineWidth = focus ? 1.5 : 1; ctx.stroke();
+      const [a, b] = place(-1.04, 1.04, li, t);
+      ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      ctx.fillStyle = focus ? css("--accent") : css("--muted");
+      ctx.fillText(`layer ${M[li].layer}`, view.ox + view.s * a - 8, view.oy + view.s * b);
+    }
+    ctx.globalAlpha = t > 0 && !focus ? 0.55 : 1;
+    for (const p of M[li].points) {
+      const lit = !matches || matches.has(p);
+      const [X, Y] = project(p, t);
+      ctx.fillStyle = lit ? colorOf(p) : dim;
+      ctx.fillRect(X - r / 2, Y - r / 2, r, r);
+      if (lit) { const key = `${Math.floor(X / 12)},${Math.floor(Y / 12)}`; (grid.get(key) || grid.set(key, []).get(key)).push(p); }
+    }
+    ctx.globalAlpha = 1;
+  }
+  if (matches) {
+    ctx.strokeStyle = ink; ctx.lineWidth = 1;
+    let n = 0;
+    for (const p of matches) {
+      if (!visibleLayers().includes(p.li) || ++n > 4000) continue;
+      const [X, Y] = project(p, t); ctx.beginPath(); ctx.arc(X, Y, r + 2.5, 0, 6.283); ctx.stroke();
+    }
+    if (t > 0) {  // how the matches connect across layers
+      ctx.strokeStyle = css("--accent"); ctx.globalAlpha = 0.5;
+      for (const p of matches) for (const [j, c] of p.u || []) {
+        const q = partnerPoint(p, "u", j);
+        if (q && matches.has(q)) { const [a, b] = project(p, t), [e, f] = project(q, t); ctx.lineWidth = 0.5 + 2 * c; ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(e, f); ctx.stroke(); }
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  if (selected) {
+    if (t > 0) {
+      for (const [a, b, c] of lineage(selected)) {
+        const [x1, y1] = project(a, t), [x2, y2] = project(b, t);
+        ctx.strokeStyle = b.li > a.li ? css("--up") : css("--down"); ctx.globalAlpha = 0.35 + 0.65 * c; ctx.lineWidth = 1 + 2.5 * c;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    } else {  // flat: the layouts are aligned, so partners show where they sit on their own layer
+      for (const dir of ["u", "d"]) for (const [j, c] of selected[dir] || []) {
+        const q = partnerPoint(selected, dir, j); if (!q) continue;
+        const [X, Y] = project({ ...q, li: active() }, 0);
+        ctx.strokeStyle = dir === "u" ? css("--up") : css("--down"); ctx.lineWidth = 1 + 2 * c; ctx.globalAlpha = 0.4 + 0.6 * c;
+        ctx.beginPath(); ctx.arc(X, Y, r + 4, 0, 6.283); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (visibleLayers().includes(selected.li)) {
+      const [X, Y] = project(selected, t);
+      ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X, Y, r + 5, 0, 6.283); ctx.stroke();
+    }
+  }
+  if (document.getElementById("names").checked && !matches) {
+    const li = active(), m = M[li];
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+    for (const reg of m.regions) {
+      if (reg.size < 120 && view.s < 1200) continue;
+      const [X, Y] = project({ x: reg.x, y: reg.y, li }, t);
+      ctx.lineWidth = 3; ctx.strokeStyle = css("--bg"); ctx.strokeText(reg.name, X, Y);
+      ctx.fillStyle = ink; ctx.fillText(reg.name, X, Y);
+    }
+  }
+  const m = M[active()];
+  document.getElementById("layerName").textContent = m.layer;
+  const counts = matches ? M.map((mm, li) => `L${mm.layer} ${[...matches].filter((p) => p.li === li).length}`).join(" · ") : "";
+  document.getElementById("stat").textContent = matches ? `matches: ${counts}`
+    : `layer ${m.layer}: ${m.points.length.toLocaleString()} features · ${m.regions.length} regions · ${m.tested.toLocaleString()} steering-tested`;
+}
+
+function nearest(mx, my) {
+  let best = null, bd = 64;
+  const gx = Math.floor(mx / 12), gy = Math.floor(my / 12), t = spread();
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const p of grid.get(`${gx + i},${gy + j}`) || []) {
+    const [X, Y] = project(p, t), d = (X - mx) ** 2 + (Y - my) ** 2 - (p.li === active() ? 20 : 0);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function describe(p) {
+  const m = M[p.li], reg = m.regions[p.r];
+  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)}` +
+    (p.s != null ? ` · steering ${p.s}` : "") + (p.f ? ` · flagged: ${esc(p.f)}` : "") + `</div>`;
+}
+function partnerList(p, dir) {
+  const li = p.li + (dir === "u" ? 1 : -1);
+  if (li < 0 || li >= NL) return "";
+  const rows = (p[dir] || []).map(([j, c]) => {
+    const q = byId[li].get(j);
+    const name = q ? `<a data-li="${li}" data-id="${j}">${esc(q.l)}</a>` : esc((DATA.names[M[li].layer] || {})[j] || "unlabeled");
+    return `<li><span class="cos">${c.toFixed(2)}</span><span>${name} <span class="meta">#${j}</span></span></li>`;
+  });
+  const title = dir === "u" ? `Turns into, layer ${M[li].layer}` : `Comes from, layer ${M[li].layer}`;
+  return `<h3>${title}</h3>` + (rows.length ? `<ul>${rows.join("")}</ul>` : `<div class="meta">no partner above ${0.15}</div>`);
+}
+function select(p) {
+  selected = p;
+  if (!p) { card.style.display = "none"; draw(); return; }
+  if (spread() === 0 && p.li !== active()) layerEl.value = p.li;
+  card.innerHTML = `<button type="button" class="close">Close</button>${describe(p)}${partnerList(p, "d")}${partnerList(p, "u")}
+    <div class="meta" style="margin-top:8px">Numbers are how alike two features' firing is on the same ${DATA.tokens.toLocaleString()} tokens (1 = identical).</div>`;
+  card.style.display = "block";
+  card.querySelector(".close").onclick = () => select(null);
+  card.querySelectorAll("a[data-id]").forEach((a) => { a.onclick = () => select(byId[+a.dataset.li].get(+a.dataset.id)); });
+  draw();
+}
+
+function legend() {
+  document.getElementById("legend").innerHTML = spread() > 0
+    ? `Stacked: deeper layers above. Click a feature for its lineage<i style="background:${css("--down")}"></i>comes from<i style="background:${css("--up")}"></i>turns into`
+    : `Same subject, same place on every layer. Slide Layer to move through depth, Stack to pull the layers apart.`;
+}
+
+let drag = null;
+canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false }; canvas.classList.add("dragging"); });
+window.addEventListener("mouseup", (e) => {
+  canvas.classList.remove("dragging");
+  if (drag && !drag.moved && e.target === canvas) select(nearest(e.clientX, e.clientY));
+  if (drag && drag.moved) draw();
+  drag = null;
+});
+window.addEventListener("mousemove", (e) => {
+  if (drag) {
+    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) drag.moved = true;
+    tip.style.display = "none"; draw(); return;
+  }
+  if (e.target !== canvas) { tip.style.display = "none"; return; }
+  const p = nearest(e.clientX, e.clientY);
+  if (!p) { tip.style.display = "none"; return; }
+  tip.innerHTML = describe(p); tip.style.display = "block";
+  tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 360) + "px"; tip.style.top = (e.clientY + 14) + "px";
+});
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * 0.0015);
+  view.ox = e.clientX - (e.clientX - view.ox) * f; view.oy = e.clientY - (e.clientY - view.oy) * f; view.s *= f;
+  draw();
+}, { passive: false });
+
+document.getElementById("q").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  matches = q ? new Set(all.filter((p) => p.l.toLowerCase().includes(q) || String(p.i) === q)) : null;
+  draw();
+});
+layerEl.addEventListener("input", draw);
+let lastSpread = 0;
+spreadEl.addEventListener("input", () => {
+  // refit when the stack opens or closes, keep the user's zoom while it moves
+  if ((spread() === 0) !== (lastSpread === 0)) fit();
+  lastSpread = spread(); legend(); draw();
+});
+spreadEl.addEventListener("change", () => { fit(); draw(); });
+colorEl.addEventListener("change", draw);
+document.getElementById("names").addEventListener("change", draw);
+document.getElementById("reset").addEventListener("click", () => { fit(); draw(); });
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" && e.target.type === "search") return;
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+    layerEl.value = Math.max(0, Math.min(NL - 1, active() + (e.key === "ArrowRight" ? 1 : -1))); draw();
+  }
+  if (e.key === "Escape") select(null);
+});
+window.addEventListener("resize", () => { fit(); draw(); });
+fit(); legend(); draw();
+</script>
+</body>
+</html>

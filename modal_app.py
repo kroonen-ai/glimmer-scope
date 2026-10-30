@@ -562,6 +562,29 @@ def rank_pairs(run: str, pairs: list[dict], top: int = 40, checkpoint: str = "fi
     }
 
 
+@app.function(volumes=VOLUMES, gpu=GPU, timeout=2 * 3600)
+def crosslayer(runs: str, n_tokens: int = 5_000_000, top: int = 8, checkpoint: str = "final"):
+    """Match features between neighboring layers' SAEs by what they fire on (scope.crosslayer)."""
+    import numpy as np
+
+    from scope import model as glimmer
+    from scope.crosslayer import cofire
+    from scope.sae import TopKSAE
+
+    model, tokenizer = glimmer.load()
+    saes = [TopKSAE.load(f"{OUTPUT_DIR}/{run}/{checkpoint}", device="cuda") for run in runs.split(",")]
+    result = cofire(model, tokenizer, saes, n_tokens, top=top)
+    os.makedirs(f"{OUTPUT_DIR}/crosslayer", exist_ok=True)
+    path = f"{OUTPUT_DIR}/crosslayer/{'-'.join(f'L{layer}' for layer in result['layers'])}.npz"
+    np.savez_compressed(path, **result)
+    scope_volume.commit()
+    for key, value in result.items():
+        if key.startswith("up_cos"):
+            best = value[:, 0]
+            print(f"{key}: best partner cosine median {np.median(best):.3f}, >=0.5 for {(best >= 0.5).mean():.1%}")
+    print(f"saved {path} from {result['tokens']} tokens")
+
+
 @app.function(volumes=VOLUMES, timeout=600)
 def directions(run: str, latents: str, checkpoint: str = "final", name: str = "features"):
     """Save the unit decoder directions of some features, for control vectors outside Modal."""

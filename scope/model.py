@@ -51,6 +51,31 @@ def residual(model, input_ids: torch.Tensor, attention_mask: torch.Tensor, layer
     return captured["acts"]
 
 
+@torch.inference_mode()
+def residuals(model, input_ids: torch.Tensor, attention_mask: torch.Tensor, layers: list[int]) -> dict[int, torch.Tensor]:
+    """The residual stream after each of ``layers``; the forward pass stops after the deepest."""
+    captured = {}
+    last = max(layers)
+
+    def make_hook(layer):
+        def hook(_module, _inputs, output):
+            captured[layer] = output.clone()
+            if layer == last:
+                raise StopForward
+
+        return hook
+
+    handles = [decoder_layers(model)[layer].register_forward_hook(make_hook(layer)) for layer in set(layers)]
+    try:
+        model.model.language_model(input_ids=input_ids, attention_mask=attention_mask, use_cache=False)
+    except StopForward:
+        pass
+    finally:
+        for handle in handles:
+            handle.remove()
+    return captured
+
+
 @contextmanager
 def steering(model, layer: int, vector: torch.Tensor):
     """Add ``vector`` to the residual stream after ``layer`` at every position."""

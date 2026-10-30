@@ -71,7 +71,8 @@ def main():
                 if r["latent"] not in scores or r["score"] > scores[r["latent"]]:
                     scores[r["latent"]] = r["score"]
     safety = {}
-    flagged = Path(__file__).resolve().parent.parent / "results" / "safety-features.json"
+    layer = json.loads((base / "final" / "cfg.json").read_text())["layer"]
+    flagged = Path(__file__).resolve().parent.parent / "results" / f"safety-features-L{layer}.json"
     if flagged.exists():
         for category, items in json.loads(flagged.read_text()).items():
             for item in items:
