@@ -104,10 +104,7 @@ def score(verdict: dict) -> tuple[float, float | None]:
 
 
 def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
-    return judged(feature, json_from(chat(judge_prompt(feature, contexts, baseline, steered))), steered)
-
-
-def judged(feature: dict, verdict: dict, steered: dict[float, list[str]]) -> dict:
+    verdict = json_from(chat(judge_prompt(feature, contexts, baseline, steered)))
     value, strength = score(verdict)
     return {
         "latent": feature.get("latent"),
@@ -148,9 +145,7 @@ def sweep(
     rows_per_batch: int = 32,
     max_new_tokens: int = 80,
     judge_workers: int = 16,
-    local_judge=None,
 ) -> int:
-    """``local_judge`` (a LocalLLM) judges each batch on this GPU instead of Muse Spark."""
     layer = sae.cfg.layer
     prefixes = [answer_prefix(tokenizer, p) for p in prompts]
     baseline = generate(model, tokenizer, prefixes, layer, None, max_new_tokens)
@@ -174,23 +169,8 @@ def sweep(
                 )
                 for (key, _), text in zip(rows, texts):
                     steered[key].setdefault(strength, []).append(text)
-            if local_judge is not None:
-                keys = list(by_key)
-                replies = local_judge.complete(
-                    [judge_prompt(by_key[k], contexts.get(k, []), baseline, steered[k]) for k in keys], max_new_tokens=220
-                )
-                for key, reply in zip(keys, replies):
-                    try:
-                        result = {**judged(by_key[key], json_from(reply), steered[key]), "judge": "glimmer"}
-                    except Exception as error:
-                        print(f"judge failed: {error}", flush=True)
-                        continue
-                    out.write(json.dumps(result, default=str) + "\n")
-                    written += 1
-                out.flush()
             for key, feature in by_key.items():
-                if local_judge is None:
-                    futures.append(pool.submit(judge, feature, contexts.get(key, []), baseline, steered[key]))
+                futures.append(pool.submit(judge, feature, contexts.get(key, []), baseline, steered[key]))
             done = [f for f in futures if f.done()]
             for future in done:
                 futures.remove(future)

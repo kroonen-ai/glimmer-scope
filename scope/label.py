@@ -44,15 +44,8 @@ def candidates(catalog_path: str, min_freq: float = 1e-6, max_freq: float = 1e-2
                 yield row
 
 
-def batch_prompt(rows: list[dict]) -> str:
-    return PROMPT.format(features="\n\n".join(describe(r) for r in rows))
-
-
 def label_batch(rows: list[dict]) -> list[dict]:
-    return parse_labels(chat(batch_prompt(rows)), rows)
-
-
-def parse_labels(reply: str, rows: list[dict]) -> list[dict]:
+    reply = chat(PROMPT.format(features="\n\n".join(describe(r) for r in rows)))
     by_latent = {r["latent"]: r for r in rows}
     labeled = []
     for item in json_from(reply):
@@ -91,28 +84,4 @@ def label_catalog(catalog_path: str, out_path: str, limit: int, batch: int = 10,
             written += len(labeled)
             if written and written % 500 < batch:
                 print(f"labeled {written}", flush=True)
-    return written
-
-
-def label_catalog_local(llm, catalog_path: str, out_path: str, limit: int, batch: int = 10, done: set | None = None) -> int:
-    """label_catalog with a LocalLLM: the same prompts, answered on this GPU, tagged "by": "glimmer"."""
-    done = done or set()
-    rows = [r for r in candidates(catalog_path) if r["latent"] not in done][:limit]
-    batches = [rows[i : i + batch] for i in range(0, len(rows), batch)]
-    written, failed, step = 0, 0, llm.max_batch * 4
-    with open(out_path, "a") as out:
-        for start in range(0, len(batches), step):
-            group = batches[start : start + step]
-            replies = llm.complete([batch_prompt(b) for b in group], max_new_tokens=60 * batch)
-            for rows_in, reply in zip(group, replies):
-                try:
-                    labeled = parse_labels(reply, rows_in)
-                except Exception:  # one unparseable reply must not lose the rest
-                    failed += 1
-                    continue
-                for item in labeled:
-                    out.write(json.dumps({**item, "by": "glimmer"}) + "\n")
-                written += len(labeled)
-            out.flush()
-            print(f"labeled {written} of {len(rows)} ({failed} replies unparseable)", flush=True)
     return written
