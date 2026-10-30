@@ -3,8 +3,8 @@
 Each labeled feature is placed by its decoder direction: unit-normalize, then UMAP to 2D with
 cosine distance, so features that write similar things into the residual stream sit
 together. K-means on a 10-D UMAP of the same neighbors splits the map into regions, each named from the words
-its members' labels share most. Writes results/feature-map.html (interactive) and
-results/feature-map.json (results/ is gitignored).
+its members' labels share most. Writes results/feature-map-L<layer>.html (interactive) and
+.json; layer 24's are results/feature-map.html and .json (results/ is gitignored).
 
     python scripts/feature_map.py runs/layer24-64k-k64 [regions] [kinds]
 
@@ -106,11 +106,12 @@ def main():
         regions.append({"id": c, "name": names[c], "size": int(len(members)),
                         "x": round(float(np.median(members[:, 0])), 3), "y": round(float(np.median(members[:, 1])), 3)})
     out = Path(__file__).resolve().parent.parent / "results"
-    data = {"points": points, "regions": regions}
-    (out / "feature-map.json").write_text(json.dumps(data))
+    data = {"points": points, "regions": regions, "layer": layer}
+    name = "feature-map" if layer == 24 else f"feature-map-L{layer}"  # layer 24's map keeps its first name
+    (out / f"{name}.json").write_text(json.dumps(data))
     template = (Path(__file__).resolve().parent / "feature_map_template.html").read_text()
-    (out / "feature-map.html").write_text(template.replace("/*DATA*/null", json.dumps(data)))
-    print(f"wrote {out / 'feature-map.html'} with {len(points)} points in {k} regions", flush=True)
+    (out / f"{name}.html").write_text(template.replace("/*DATA*/null", json.dumps(data)))
+    print(f"wrote {out / name}.html with {len(points)} points in {k} regions", flush=True)
 
 
 if __name__ == "__main__":

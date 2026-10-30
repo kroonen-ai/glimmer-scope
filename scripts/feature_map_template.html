@@ -107,7 +107,7 @@ function draw() {
     }
   }
   const tested = P.filter((p) => p.score != null).length;
-  document.getElementById("stat").textContent = `${P.length.toLocaleString()} features · ${R.length} regions · ${tested.toLocaleString()} steering-tested` + (matches ? ` · ${matches.size} match` : "");
+  document.getElementById("stat").textContent = (DATA.layer ? `layer ${DATA.layer} · ` : "") + `${P.length.toLocaleString()} features · ${R.length} regions · ${tested.toLocaleString()} steering-tested` + (matches ? ` · ${matches.size} match` : "");
 }
 
 // nearest point under the cursor, through a coarse grid
