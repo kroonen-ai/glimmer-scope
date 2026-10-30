@@ -216,6 +216,36 @@ def label(run: str, limit: int = 20000, workers: int = 16):
     print(f"labeled {written} now, {len(done) + written} in total")
 
 
+def read_labels(base: str) -> list[dict]:
+    """Muse Spark's labels, then Glimmer's own for features Muse Spark has not named."""
+    import json
+
+    rows, seen = [], set()
+    for name in ("labels.jsonl", "labels-glimmer.jsonl"):
+        if os.path.exists(f"{base}/{name}"):
+            for line in open(f"{base}/{name}"):
+                row = json.loads(line)
+                if row["latent"] not in seen:
+                    seen.add(row["latent"])
+                    rows.append(row)
+    return rows
+
+
+@app.function(volumes=VOLUMES, gpu=GPU, timeout=8 * 3600)
+def label_local(run: str, limit: int = 50000):
+    """label, answered by Glimmer on this GPU into labels-glimmer.jsonl (no outside API)."""
+    from scope import model as glimmer
+    from scope.label import label_catalog_local
+    from scope.local_llm import LocalLLM
+
+    base = f"{OUTPUT_DIR}/{run}"
+    done = {row["latent"] for row in read_labels(base)}
+    model, tokenizer = glimmer.load()
+    written = label_catalog_local(LocalLLM(model, tokenizer), f"{base}/catalog.jsonl.gz", f"{base}/labels-glimmer.jsonl", limit, done=done)
+    scope_volume.commit()
+    print(f"labeled {written} now, {len(done) + written} in total")
+
+
 @app.function(volumes=VOLUMES, secrets=[meta_secret], gpu=GPU, timeout=12 * 3600)
 def sweep(
     run: str,
@@ -228,6 +258,7 @@ def sweep(
     prompt_set: str = "everyday",
     rows_per_batch: int = 128,
     judge_workers: int = 32,
+    judge: str = "meta",
 ):
     """Steer with the most promising labeled features and have Muse Spark score them.
 
@@ -245,6 +276,7 @@ def sweep(
     from scope import model as glimmer
     from scope.archetype import EVAL_SETS
     from scope.sae import TopKSAE
+    from scope.local_llm import LocalLLM
     from scope.steerability import contexts_for, sweep as run_sweep
 
     base = f"{OUTPUT_DIR}/{run}"
@@ -254,7 +286,7 @@ def sweep(
         scored = {json.loads(line)["latent"] for line in open(out)}
     if candidates == "labels":
         wanted = set(kinds.split(","))
-        labels = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
+        labels = read_labels(base)
         features = [
             f for f in labels if f["kind"] in wanted and f["steer"] >= min_steer and f["latent"] not in scored
         ]
@@ -282,6 +314,7 @@ def sweep(
     written = run_sweep(
         model, tokenizer, sae, features, contexts, out, strengths=tuple(float(s) for s in strengths.split(",")),
         prompts=EVAL_SETS[prompt_set], rows_per_batch=rows_per_batch, judge_workers=judge_workers,
+        local_judge=LocalLLM(model, tokenizer) if judge == "glimmer" else None,
     )
     scope_volume.commit()
     print(f"scored {written}")
