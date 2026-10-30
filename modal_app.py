@@ -196,7 +196,8 @@ def steer(run: str, latent: int, prompt: str = "Describe your ideal weekend.", s
         print(f"--- latent {latent} x{s} (peak {peak:.2f})\n{tokenizer.decode(out[0, inputs.input_ids.shape[1]:])}\n")
 
 
-meta_secret = modal.Secret.from_name("meta")
+# GLIMMER_META_SECRET picks which Modal secret holds META_API_KEY (default "meta")
+meta_secret = modal.Secret.from_name(os.environ.get("GLIMMER_META_SECRET", "meta"))
 
 
 @app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=8 * 3600)

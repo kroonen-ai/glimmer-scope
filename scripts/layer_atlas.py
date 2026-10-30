@@ -54,8 +54,9 @@ def main():
     runs = sys.argv[2].split(",")
     results = Path(__file__).resolve().parent.parent / "results"
     layers = sorted((load_layer(base, run, results) for run in runs), key=lambda d: d["layer"])
-    tag = "-".join(f"L{d['layer']}" for d in layers)
-    cross = np.load(base / "crosslayer" / f"{tag}.npz")
+    # any cross-layer file that covers these layers will do (one pass can cover more layers)
+    wanted = {f"up_idx_L{lo['layer']}_L{hi['layer']}" for lo, hi in zip(layers, layers[1:])}
+    cross = next(c for c in map(np.load, sorted((base / "crosslayer").glob("*.npz"))) if wanted <= set(c.files))
     for d in layers:
         print(f"layer {d['layer']}: {len(d['X'])} concept features", flush=True)
 
