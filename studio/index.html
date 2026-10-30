@@ -204,6 +204,8 @@ const GROUPS = [
   ["mood", "Moods and styles", ""],
   ["discovered", "Discovered", "found by scanning every feature"],
   ["untested", "Discovered, untested", "single features, strengths from one-reply tests"],
+  ["found", "Found, full score", "sweep 2: the judge saw the concept clearly and the text stayed fluent"],
+  ["found-partial", "Found, partial", "sweep 2: score 0.67, the concept shows but weaker or less fluent"],
   ["research", "Research", "private, for interpretability work"],
 ];
 
@@ -249,7 +251,7 @@ function renderVectors() {
     if (!members.length) continue;
     const details = document.createElement("details");
     details.className = "group";
-    details.open = state.openGroups[key] ?? !["untested", "research"].includes(key);
+    details.open = state.openGroups[key] ?? !["untested", "research", "found", "found-partial"].includes(key);
     details.innerHTML = `<summary>${escapeHtml(title)} <span class="count">${members.length}</span>${note ? `<span class="note">· ${escapeHtml(note)}</span>` : ""}</summary>`;
     details.addEventListener("toggle", () => { state.openGroups[key] = details.open; saveOpenGroups(state.openGroups); });
     for (const v of members) details.appendChild(vectorRow(v));
