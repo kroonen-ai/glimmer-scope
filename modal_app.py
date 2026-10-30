@@ -226,8 +226,13 @@ def sweep(
     checkpoint: str = "final",
     candidates: str = "labels",
     prompt_set: str = "everyday",
+    rows_per_batch: int = 128,
+    judge_workers: int = 32,
 ):
     """Steer with the most promising labeled features and have Muse Spark score them.
+
+    Generation is memory-bound, so 128 rows a batch costs little more per step than 32 and
+    roughly doubles features per GPU hour; greedy decoding keeps the texts the same.
 
     ``candidates="personas"`` sweeps the features ``persona_scan`` flagged instead, judged on
     ``prompt_set`` prompts from scope.archetype.EVAL_SETS (``social`` suits them) into
@@ -276,7 +281,7 @@ def sweep(
     sae = TopKSAE.load(f"{base}/{checkpoint}", device="cuda")
     written = run_sweep(
         model, tokenizer, sae, features, contexts, out, strengths=tuple(float(s) for s in strengths.split(",")),
-        prompts=EVAL_SETS[prompt_set],
+        prompts=EVAL_SETS[prompt_set], rows_per_batch=rows_per_batch, judge_workers=judge_workers,
     )
     scope_volume.commit()
     print(f"scored {written}")
