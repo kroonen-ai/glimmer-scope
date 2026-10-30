@@ -31,11 +31,22 @@ def chat(prompt: str, max_tokens: int = 4000, effort: str = "low", retries: int 
         data=body,
         headers={"Authorization": f"Bearer {os.environ['META_API_KEY']}", "Content-Type": "application/json"},
     )
+    empty = []
     for attempt in range(retries):
         try:
             with urllib.request.urlopen(request, timeout=300) as response:
                 data = json.load(response)
-            return data["choices"][0]["message"].get("content") or ""
+            choice = data["choices"][0]
+            if content := choice["message"].get("content"):
+                return content
+            # An empty answer is either a block (finish_reason says so) or reasoning that used up
+            # the budget; ask again with more room, and name the reason if it never answers.
+            empty.append(choice.get("finish_reason") or "none given")
+            if len(empty) == 3:
+                raise RuntimeError(f"Muse Spark answered empty 3 times (finish_reason: {', '.join(empty)})")
+            max_tokens = min(16000, max_tokens * 2)
+            request.data = json.dumps({**json.loads(body), "max_tokens": max_tokens}).encode()
+            continue
         except urllib.error.HTTPError as error:
             if error.code not in (408, 409, 429, 500, 502, 503, 504) or attempt == retries - 1:
                 raise RuntimeError(f"Meta API {error.code}: {error.read()[:300]!r}") from error
