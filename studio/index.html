@@ -3,109 +3,170 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Glimmer Studio</title>
+<title>Glimmer Studio · Kroonen AI</title>
 <style>
   :root {
-    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db;
-    --accent: #7a4cf5; --accent-soft: #efe9ff; --user: #1d1c1a; --user-ink: #faf9f7; --warn: #b4501f;
+    --bg: #ffffff; --surface: #f1f4f8; --panel: #ffffff; --ink: #1c2b33; --muted: #5d6c7b; --line: #dde4ec;
+    --accent: #0064e0; --accent-hover: #0050b5; --accent-tint: #e7f0fd; --accent-ink: #0050b5; --on-accent: #ffffff;
+    --warn: #c2410c; --shadow: 0 1px 2px rgba(28,43,51,0.06), 0 8px 24px rgba(28,43,51,0.08);
+    --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #121214; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31;
-      --accent: #a587ff; --accent-soft: #2a2340; --user: #ecebe8; --user-ink: #121214; --warn: #f08a5d;
+      --bg: #0b1118; --surface: #111a24; --panel: #131d28; --ink: #e8eef4; --muted: #94a4b3; --line: #233242;
+      --accent: #2d88ff; --accent-hover: #5aa2ff; --accent-tint: rgba(45,136,255,0.15); --accent-ink: #84b8ff; --warn: #fb923c;
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35);
     }
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { background: var(--bg); color: var(--ink); font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .app { display: grid; grid-template-columns: 340px 1fr; height: 100%; }
-  aside { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
-  aside header { padding: 20px 20px 12px; border-bottom: 1px solid var(--line); }
-  h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
-  .mix { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-  .mix .summary { font-size: 12px; color: var(--muted); flex: 1; min-width: 0; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  button:hover { border-color: var(--muted); }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font); }
+  button { font: inherit; font-size: 13.5px; font-weight: 500; border: 1px solid transparent; background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 13px; cursor: pointer; }
+  button:hover { background: var(--accent-tint); color: var(--accent-ink); }
+  button.primary { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  button.primary:hover { background: var(--accent-hover); color: var(--on-accent); }
   button:disabled { opacity: .5; cursor: default; }
-  .vectors { overflow-y: auto; padding: 8px 12px 20px; }
-  .group { margin-top: 6px; }
-  .group > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 10px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-  .group > summary::-webkit-details-marker { display: none; }
-  .group > summary::before { content: "▸"; font-size: 10px; transition: transform .15s; }
-  .group[open] > summary::before { transform: rotate(90deg); }
-  .group > summary .count { font-weight: 500; letter-spacing: 0; text-transform: none; }
-  .group > summary .note { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 11px; opacity: .8; }
+  input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+  .app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+
+  /* sidebar: brand, mix, filters, the dials */
+  aside { border-right: 1px solid var(--line); background: var(--panel); min-height: 0; overflow-y: auto; }
+  aside header { padding: 16px 16px 6px; }
+  .filter { position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 8px 16px 10px; border-bottom: 1px solid var(--line); }
+  .brandrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .maps { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .maps a { font-size: 12.5px; font-weight: 600; color: var(--accent-ink); background: var(--accent-tint); text-decoration: none; padding: 3px 10px; border-radius: 999px; }
+  .maps a::after { content: " ↗"; font-weight: 400; }
+  .maps a:hover { background: var(--accent); color: var(--on-accent); }
+  .brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; white-space: nowrap; }
+  .brand-mark { width: 24px; height: 24px; flex: none; }
+  .brand-mark .k { fill: var(--mark-k, #0a0a0c); } .brand-mark .b { fill: var(--mark-bg, #dcdce0); } .brand-mark .c { fill: var(--mark-c, #2fae62); }
+  .brand-word { font-size: 15px; font-weight: 600; letter-spacing: -0.045em; }
+  .brand-word span { font-weight: 400; color: var(--muted); }
+  .brand-sep { width: 1px; height: 16px; background: var(--line); }
+  .brand-product { font-size: 14.5px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+  .on-now { margin-top: 12px; background: var(--surface); border-radius: 14px; padding: 10px 12px; }
+  .on-now .head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; color: var(--accent-ink); text-transform: uppercase; letter-spacing: .05em; }
+  .on-now .head span { flex: 1; }
+  .on-now .head button { font-size: 12px; padding: 2px 10px; background: var(--panel); text-transform: none; letter-spacing: 0; }
+  .on-now .none { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .on-now .live { display: grid; grid-template-columns: minmax(0, 1fr) 90px 2.6em auto; gap: 4px 8px; align-items: center; margin-top: 6px; font-size: 13px; }
+  .on-now .live .n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .on-now .live .v { font-variant-numeric: tabular-nums; color: var(--accent-ink); font-weight: 650; text-align: right; }
+  .on-now .live button { padding: 0 7px; line-height: 20px; background: transparent; color: var(--muted); }
+  .on-now .live button:hover { color: var(--warn); background: transparent; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .presets button { font-size: 12px; padding: 3px 10px; border-radius: 99px; }
-  .system { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; }
-  .system > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; font-size: 13px; }
+  .presets button { font-size: 12.5px; padding: 4px 11px; border: 1px solid var(--line); background: var(--panel); }
+  .presets button:hover { border-color: var(--accent); }
+  .system { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; }
+  .system > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 7px 12px; font-size: 13.5px; font-weight: 500; }
   .system > summary::-webkit-details-marker { display: none; }
   .system > summary::before { content: "▸"; font-size: 10px; color: var(--muted); transition: transform .15s; }
   .system[open] > summary::before { transform: rotate(90deg); }
-  .system > summary .state { margin-left: auto; font-size: 11px; color: var(--muted); }
-  .system.on > summary .state { color: var(--accent); font-weight: 600; }
-  .system textarea { display: block; width: calc(100% - 16px); margin: 0 8px; flex: none; resize: vertical; font-size: 13px; line-height: 1.45; min-height: 120px; max-height: 45vh; border-radius: 8px; }
-  .system .actions { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; font-size: 11px; color: var(--muted); }
+  .system > summary .state { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .system.on > summary .state { color: var(--accent-ink); font-weight: 650; }
+  .system textarea { display: block; width: calc(100% - 16px); margin: 0 8px; resize: vertical; font-size: 13px; line-height: 1.45; min-height: 120px; max-height: 45vh; border-radius: 10px; }
+  .system .actions { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; font-size: 11.5px; color: var(--muted); }
   .system .actions span { flex: 1; }
   .system .actions button { font-size: 12px; padding: 2px 10px; }
-  .search { width: 100%; margin-top: 10px; font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-  .layers { display: none; gap: 6px; margin-top: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+  .search { width: 100%; margin-top: 0; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid transparent; border-radius: 999px; padding: 8px 14px; }
+  .search:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+  .layers { display: none; gap: 4px; margin-top: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
   .layers.on { display: flex; flex-wrap: wrap; }
-  .layers button { font-size: 12px; padding: 2px 10px; border-radius: 99px; }
-  .layers button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .vec .layer { font-size: 11px; font-weight: 600; color: var(--accent); border: 1px solid var(--line); border-radius: 99px; padding: 0 6px; }
-  .vec { padding: 10px 8px; border-radius: 10px; }
-  .vec.on { background: var(--accent-soft); }
+  .layers span { margin-right: 4px; }
+  .layers button { font-size: 12.5px; padding: 3px 11px; }
+  .layers button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .vectors { padding: 6px 10px 24px; }
+  .group { margin-top: 4px; }
+  .group > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 10px 8px 6px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary::before { content: "▸"; font-size: 10px; transition: transform .15s; }
+  .group[open] > summary::before { transform: rotate(90deg); }
+  .group > summary .count { font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--accent-ink); }
+  .group > summary .note { flex-basis: 100%; padding-left: 18px; font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 11.5px; opacity: .85; }
+  .group .more { display: block; margin: 6px auto 4px; font-size: 12.5px; }
+  .vec { padding: 10px 10px; border-radius: 12px; }
+  .vec + .vec { border-top: 1px solid var(--line); }
+  .vec.on { background: var(--accent-tint); border-top-color: transparent; }
+  .vec.on + .vec { border-top-color: transparent; }
   .vec .top { display: flex; align-items: baseline; gap: 8px; }
   .vec .name { font-weight: 600; font-size: 14px; flex: 1; cursor: pointer; }
+  .vec .name:hover { color: var(--accent-ink); }
+  .vec .layer { font-size: 11px; font-weight: 650; color: var(--accent-ink); background: var(--accent-tint); border-radius: 999px; padding: 1px 7px; }
+  .vec.on .layer { background: var(--panel); }
   .vec .val { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); min-width: 2.6em; text-align: right; }
-  .vec.on .val { color: var(--accent); font-weight: 600; }
-  .vec .desc { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
-  .vec .src { font-size: 11px; color: var(--muted); opacity: .8; }
-  input[type=range] { width: 100%; accent-color: var(--accent); }
-  main { display: flex; flex-direction: column; min-height: 0; }
-  .log { flex: 1; overflow-y: auto; padding: 28px max(24px, calc(50% - 380px)); }
-  .empty { color: var(--muted); text-align: center; margin-top: 18vh; }
-  .empty b { color: var(--ink); }
-  .msg { margin: 0 0 22px; }
+  .vec.on .val { color: var(--accent-ink); font-weight: 650; }
+  .vec .desc { font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
+  .vec .src { font-size: 11.5px; color: var(--muted); opacity: .9; }
+  .vec .src a { color: var(--accent-ink); text-decoration: none; font-weight: 600; }
+  .vec .src a:hover { text-decoration: underline; }
+  input[type=range] { width: 100%; }
+  .nomatch { color: var(--muted); font-size: 13px; padding: 16px 8px; }
+
+  /* conversation */
+  main { display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
+  .mobilebar { display: none; }
+  .log { flex: 1; overflow-y: auto; padding: 28px max(24px, calc(50% - 400px)); }
+  .empty { text-align: center; margin-top: 14vh; color: var(--muted); }
+  .empty h2 { color: var(--ink); font-size: 26px; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .empty p { margin: 0 auto 20px; max-width: 30em; }
+  .starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .starters button { border: 1px solid var(--line); background: var(--panel); font-size: 14px; padding: 8px 14px; }
+  .starters button:hover { border-color: var(--accent); }
+  .msg { margin: 0 0 24px; }
   .msg.user { display: flex; justify-content: flex-end; }
-  .msg.user .bubble { background: var(--user); color: var(--user-ink); border-radius: 16px 16px 4px 16px; padding: 10px 14px; max-width: 80%; white-space: pre-wrap; }
-  .msg.bot .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-  .chip { font-size: 11px; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-  .chip.plain { background: transparent; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+  .msg.user .bubble { background: var(--accent); color: var(--on-accent); border-radius: 20px 20px 6px 20px; padding: 10px 16px; max-width: 80%; white-space: pre-wrap; }
+  .msg.bot .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chip { font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--accent-tint); color: var(--accent-ink); font-weight: 650; }
+  .chip.plain { background: var(--surface); color: var(--muted); font-weight: 500; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .pair > div { min-width: 0; }
+  .pair > div { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; }
+  .pair > div:last-child { background: var(--surface); border-color: transparent; }
   .body p { margin: 0 0 10px; } .body ul, .body ol { margin: 0 0 10px; padding-left: 22px; }
   .body h3, .body h4 { margin: 12px 0 6px; font-size: 15px; }
-  .think { font-size: 12px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; margin-bottom: 8px; white-space: pre-wrap; }
-  .stats { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .body code { font-size: 13px; background: var(--surface); padding: 1px 5px; border-radius: 5px; }
+  .think { font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--accent-tint); padding-left: 10px; margin-bottom: 8px; white-space: pre-wrap; }
+  .stats { display: flex; gap: 10px; align-items: center; font-size: 11.5px; color: var(--muted); margin-top: 4px; min-height: 22px; }
+  .stats button { font-size: 11.5px; padding: 1px 9px; }
   .err { color: var(--warn); }
-  form { border-top: 1px solid var(--line); background: var(--panel); padding: 14px max(24px, calc(50% - 380px)); }
+  form { border-top: 1px solid var(--line); background: var(--panel); padding: 14px max(24px, calc(50% - 400px)) 12px; }
   .row { display: flex; gap: 10px; align-items: flex-end; }
-  textarea { flex: 1; resize: none; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 46px; max-height: 200px; }
-  textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
-  .opts { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; align-items: center; }
+  textarea { flex: 1; resize: none; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid transparent; border-radius: 22px; padding: 11px 16px; min-height: 46px; max-height: 200px; }
+  textarea:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+  #send { padding: 11px 20px; font-size: 14.5px; }
+  .opts { display: flex; gap: 8px 16px; font-size: 13px; color: var(--muted); margin-top: 10px; flex-wrap: wrap; align-items: center; }
   .opts label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
-  select { font: inherit; font-size: 12px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px; }
+  .opts #reset { margin-left: auto; }
+  select { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid transparent; border-radius: 999px; padding: 3px 8px; }
+
   @media (max-width: 820px) {
-    .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-    aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: 42vh; }
+    .app { grid-template-columns: 1fr; }
+    aside { position: fixed; inset: 0; z-index: 20; transform: translateX(-100%); transition: transform .2s; border-right: 0; }
+    .app.dials aside { transform: none; }
+    .mobilebar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+    .closer { display: inline-block !important; }
     .log, form { padding-left: 16px; padding-right: 16px; }
     .pair { grid-template-columns: 1fr; }
+    .opts #reset { margin-left: 0; }
   }
+  .closer { display: none; }
 </style>
+<link rel="stylesheet" href="theme.css">
 </head>
 <body>
-<div class="app">
-  <aside>
+<div class="app" id="app">
+  <aside aria-label="Steering dials">
     <header>
-      <h1>Glimmer Studio</h1>
-      <div class="sub" id="tagline">Muse Glimmer 30B with features from its own layer 24 added back in, live, per reply.</div>
-      <div class="mix">
-        <div class="summary" id="summary">No steering</div>
-        <button type="button" id="clear">Clear</button>
+      <div class="brandrow">
+        <a class="brand" href="./" aria-label="Glimmer Studio, by Kroonen AI"><svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><circle class="b" cx="60" cy="20" r="7"/><circle class="b" cx="80" cy="20" r="7"/><circle class="b" cx="40" cy="40" r="7"/><circle class="b" cx="100" cy="40" r="7"/><circle class="b" cx="80" cy="60" r="7"/><circle class="b" cx="100" cy="60" r="7"/><circle class="b" cx="40" cy="80" r="7"/><circle class="b" cx="100" cy="80" r="7"/><circle class="b" cx="40" cy="100" r="7"/><circle class="b" cx="60" cy="100" r="7"/><circle class="b" cx="80" cy="100" r="7"/><circle class="k" cx="20" cy="20" r="7"/><circle class="k" cx="100" cy="20" r="7"/><circle class="k" cx="20" cy="40" r="7"/><circle class="k" cx="80" cy="40" r="7"/><circle class="k" cx="20" cy="60" r="7"/><circle class="k" cx="40" cy="60" r="7"/><circle class="k" cx="20" cy="80" r="7"/><circle class="k" cx="80" cy="80" r="7"/><circle class="k" cx="20" cy="100" r="7"/><circle class="k" cx="100" cy="100" r="7"/><circle class="c" cx="60" cy="60" r="7"/></svg><span class="brand-word">kroonen<span>.ai</span></span><span class="brand-sep"></span><span class="brand-product">Glimmer Studio</span></a>
+        <button type="button" class="closer" id="closeDials" aria-label="Close dials">Done</button>
+      </div>
+      <p class="sub" id="tagline">Muse Glimmer 30B with features from its own layers added back in, live, per reply.</p>
+      <nav class="maps" aria-label="Maps, in a new tab"><a href="atlas.html" target="_blank" rel="noopener">Atlas</a><a href="layer-12.html" target="_blank" rel="noopener">Layer 12</a><a href="layer-24.html" target="_blank" rel="noopener">Layer 24</a><a href="layer-36.html" target="_blank" rel="noopener">Layer 36</a></nav>
+      <div class="on-now" aria-live="polite">
+        <div class="head"><span>On now</span><button type="button" id="clear">Clear all</button></div>
+        <div id="active"></div>
       </div>
       <div class="presets" id="presets"></div>
       <details class="system" id="systemBox">
@@ -113,18 +174,22 @@
         <textarea id="system" placeholder="Optional. Sent first, to both columns, on every reply." aria-label="System prompt"></textarea>
         <div class="actions"><span>Saved in this browser. Changes apply from the next reply.</span><button type="button" id="systemClear">Clear</button></div>
       </details>
-      <input class="search" id="search" type="search" placeholder="Filter dials" aria-label="Filter dials">
-      <div class="layers" id="layers" role="group" aria-label="Show dials from layer"></div>
     </header>
-    <div class="vectors" id="vectors"><div class="sub" style="padding:8px">Loading features…</div></div>
+    <div class="filter">
+      <input class="search" id="search" type="search" placeholder="Search dials" aria-label="Search dials" autocomplete="off">
+      <div class="layers" id="layers" role="group" aria-label="Show dials from layer"></div>
+    </div>
+    <div class="vectors" id="vectors"><div class="nomatch">Loading features…</div></div>
   </aside>
   <main>
-    <div class="log" id="log">
-      <div class="empty" id="empty">Move a slider, then say something.<br><b>The dials apply to every reply and can change mid-conversation.</b></div>
+    <div class="mobilebar">
+      <a class="brand" href="./"><svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true"><circle class="b" cx="60" cy="20" r="7"/><circle class="b" cx="80" cy="20" r="7"/><circle class="b" cx="40" cy="40" r="7"/><circle class="b" cx="100" cy="40" r="7"/><circle class="b" cx="80" cy="60" r="7"/><circle class="b" cx="100" cy="60" r="7"/><circle class="b" cx="40" cy="80" r="7"/><circle class="b" cx="100" cy="80" r="7"/><circle class="b" cx="40" cy="100" r="7"/><circle class="b" cx="60" cy="100" r="7"/><circle class="b" cx="80" cy="100" r="7"/><circle class="k" cx="20" cy="20" r="7"/><circle class="k" cx="100" cy="20" r="7"/><circle class="k" cx="20" cy="40" r="7"/><circle class="k" cx="80" cy="40" r="7"/><circle class="k" cx="20" cy="60" r="7"/><circle class="k" cx="40" cy="60" r="7"/><circle class="k" cx="20" cy="80" r="7"/><circle class="k" cx="80" cy="80" r="7"/><circle class="k" cx="20" cy="100" r="7"/><circle class="k" cx="100" cy="100" r="7"/><circle class="c" cx="60" cy="60" r="7"/></svg><span class="brand-product">Glimmer Studio</span></a>
+      <button type="button" id="openDials">Dials</button>
     </div>
+    <div class="log" id="log"></div>
     <form id="form">
       <div class="row">
-        <textarea id="input" rows="1" placeholder="Message Glimmer"></textarea>
+        <textarea id="input" rows="1" placeholder="Message Glimmer" aria-label="Message"></textarea>
         <button class="primary" id="send" type="submit">Send</button>
       </div>
       <div class="opts">
@@ -138,8 +203,10 @@
 </div>
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { vectors: [], mix: {}, history: [], busy: false, layers: [], layer: "all" };
+const state = { vectors: [], byName: new Map(), mix: {}, history: [], busy: false, layers: [], layer: "all", shown: {}, abort: null };
 try { const saved = localStorage.getItem("studio-layer"); if (saved) state.layer = saved === "all" ? "all" : +saved; } catch {}
+const MAPPED = new Set([12, 24, 36]);  // layers with a map page next to this one
+const STARTERS = ["Describe your ideal weekend.", "Tell me about yourself.", "What should I cook for dinner tonight?", "Write a short paragraph about a train journey."];
 
 // The system prompt goes first in both columns, so a comparison only differs by the steering.
 function systemPrompt() { return $("system").value.trim(); }
@@ -159,7 +226,7 @@ function updateSystemState() {
 }
 
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 // Just enough Markdown for chat replies: headings, lists, bold, italics, code.
@@ -185,6 +252,16 @@ function render(md) {
   return out.join("");
 }
 
+// dials without a layer field are layer 24, where the first SAE sits
+const layerOf = (v) => v.layer ?? 24;
+const labelOf = (name) => state.byName.get(name)?.label || name;
+const layerTag = (name) => { const v = state.byName.get(name); return v && state.layers.length > 1 ? ` L${layerOf(v)}` : ""; };
+// an SAE feature dial says which feature it is in its source line
+function mapLink(v) {
+  const m = /SAE feature (\d+)/.exec(v.source || "");
+  return m && MAPPED.has(layerOf(v)) ? `layer-${layerOf(v)}.html#${m[1]}` : null;
+}
+
 function activeMix() {
   return Object.fromEntries(Object.entries(state.mix).filter(([, v]) => v > 0));
 }
@@ -192,21 +269,8 @@ function activeMix() {
 function chipsFor(mix) {
   const entries = Object.entries(mix);
   if (!entries.length) return `<span class="chip plain">unsteered</span>`;
-  return entries.map(([k, v]) => {
-    const label = state.vectors.find((x) => x.name === k)?.label || k;
-    return `<span class="chip">${escapeHtml(label)} ${v.toFixed(2)}</span>`;
-  }).join("");
+  return entries.map(([k, v]) => `<span class="chip">${escapeHtml(labelOf(k))}${layerTag(k)} ${v.toFixed(2)}</span>`).join("");
 }
-
-function updateSummary() {
-  const mix = activeMix();
-  const n = Object.keys(mix).length;
-  $("summary").textContent = n ? Object.entries(mix).map(([k, v]) => `${state.vectors.find((x) => x.name === k)?.label || k}${layerTag(k)} ${v.toFixed(2)}`).join(" + ") : "No steering";
-}
-
-// dials without a layer field are layer 24, where the first SAE sits
-const layerOf = (v) => v.layer ?? 24;
-const layerTag = (name) => { const v = state.vectors.find((x) => x.name === name); return v && state.layers.length > 1 ? ` L${layerOf(v)}` : ""; };
 
 const GROUPS = [
   ["companion", "Companions", ""],
@@ -220,6 +284,7 @@ const GROUPS = [
   ["research", "Research", "private, for interpretability work"],
   ["safety", "Safety research", "flagged safety-relevant features; private, never for demos"],
 ];
+const PAGE = 120;
 
 function loadOpenGroups() {
   try { return JSON.parse(localStorage.getItem("studio-open-groups")) || null; } catch { return null; }
@@ -229,50 +294,96 @@ function saveOpenGroups(open) {
 }
 state.openGroups = loadOpenGroups() || { companion: true, anime: true, character: true, mood: false, research: false };
 
+// One dial's value changed: every slider and readout for it follows, and the On now list
+// is rebuilt only when a dial turns on or off, so dragging never loses its slider.
+function setDial(name, x) {
+  const was = (state.mix[name] || 0) > 0;
+  state.mix[name] = x;
+  for (const row of document.querySelectorAll(`[data-name="${CSS.escape(name)}"]`)) {
+    const slider = row.querySelector("input[type=range]");
+    if (slider && +slider.value !== x) slider.value = x;
+    const val = row.querySelector(".val, .v");
+    if (val) val.textContent = x ? x.toFixed(2) : "off";
+    row.classList.toggle("on", x > 0);
+  }
+  if (was !== x > 0) renderActive();
+}
+
+function renderActive() {
+  const box = $("active");
+  const mix = activeMix();
+  const names = Object.keys(mix);
+  $("openDials").textContent = names.length ? `Dials · ${names.length} on` : "Dials";
+  if (!names.length) { box.innerHTML = `<div class="none">No steering. Turn up a dial below, or click a dial's name for its suggested strength.</div>`; return; }
+  box.innerHTML = "";
+  for (const name of names) {
+    const row = document.createElement("div");
+    row.className = "live";
+    row.dataset.name = name;
+    row.innerHTML = `<span class="n" title="${escapeHtml(labelOf(name))}">${escapeHtml(labelOf(name))}${escapeHtml(layerTag(name))}</span>
+      <input type="range" min="0" max="1" step="0.05" value="${mix[name]}" aria-label="${escapeHtml(labelOf(name))} strength">
+      <span class="v">${mix[name].toFixed(2)}</span><button type="button" aria-label="Turn off ${escapeHtml(labelOf(name))}">✕</button>`;
+    row.querySelector("input").addEventListener("input", (e) => setDial(name, parseFloat(e.target.value)));
+    row.querySelector("button").addEventListener("click", () => setDial(name, 0));
+    box.appendChild(row);
+  }
+}
+
 function vectorRow(v) {
   const value = state.mix[v.name] || 0;
   const row = document.createElement("div");
   row.className = "vec" + (value > 0 ? " on" : "");
-  row.dataset.search = `${v.name} ${v.label || ""} ${v.description || ""}`.toLowerCase();
-  row.dataset.layer = layerOf(v);
+  row.dataset.name = v.name;
   const tag = state.layers.length > 1 ? `<span class="layer" title="Added after layer ${layerOf(v)}">L${layerOf(v)}</span>` : "";
+  const link = mapLink(v);
   row.innerHTML = `
     <div class="top"><span class="name" title="Click for the suggested strength">${escapeHtml(v.label || v.name)}</span>${tag}<span class="val">${value ? value.toFixed(2) : "off"}</span></div>
     <div class="desc">${escapeHtml(v.description || "")}</div>
     <input type="range" min="0" max="1" step="0.05" value="${value}" aria-label="${escapeHtml(v.label || v.name)} strength">
-    <div class="src">${escapeHtml(v.source || "")}${v.default ? ` · suggested ${v.default}` : ""}</div>`;
-  const slider = row.querySelector("input");
-  const val = row.querySelector(".val");
-  const set = (x) => {
-    state.mix[v.name] = x;
-    slider.value = x;
-    val.textContent = x ? x.toFixed(2) : "off";
-    row.classList.toggle("on", x > 0);
-    updateSummary();
-  };
-  slider.addEventListener("input", () => set(parseFloat(slider.value)));
-  row.querySelector(".name").addEventListener("click", () => set(state.mix[v.name] ? 0 : (v.default || 0.5)));
+    <div class="src">${escapeHtml(v.source || "")}${v.default ? ` · suggested ${v.default}` : ""}${link ? ` · <a href="${link}" target="_blank" rel="noopener">on the map</a>` : ""}</div>`;
+  row.querySelector("input").addEventListener("input", (e) => setDial(v.name, parseFloat(e.target.value)));
+  row.querySelector(".name").addEventListener("click", () => setDial(v.name, state.mix[v.name] ? 0 : (v.default || 0.5)));
   return row;
+}
+
+// Groups fill in when opened, a page of dials at a time, so thousands of dials stay fast.
+function fill(details, key, members) {
+  details.querySelector(".more")?.remove();
+  const start = details.querySelectorAll(".vec").length, end = Math.max(state.shown[key] || PAGE, start + 1);
+  for (const v of members.slice(start, end)) details.appendChild(vectorRow(v));
+  const left = members.length - Math.min(end, members.length);
+  if (left > 0) {
+    const more = document.createElement("button");
+    more.type = "button"; more.className = "more"; more.textContent = `Show ${Math.min(left, PAGE)} more of ${left.toLocaleString()}`;
+    more.addEventListener("click", () => { state.shown[key] = end + PAGE; fill(details, key, members); });
+    details.appendChild(more);
+  }
 }
 
 function renderVectors() {
   const box = $("vectors");
   box.innerHTML = "";
+  const q = ($("search").value || "").trim().toLowerCase();
   const known = new Set(GROUPS.map(([key]) => key));
-  const groups = [...GROUPS, ["other", "Other", ""]];
-  for (const [key, title, note] of groups) {
-    const members = state.vectors.filter((v) => (known.has(v.group) ? v.group : "other") === key);
+  let shown = 0;
+  for (const [key, title, note] of [...GROUPS, ["other", "Other", ""]]) {
+    const members = state.vectors.filter((v) => (known.has(v.group) ? v.group : "other") === key &&
+      (state.layer === "all" || layerOf(v) === state.layer) && (!q || v.search.includes(q)));
     if (!members.length) continue;
+    shown += members.length;
     const details = document.createElement("details");
     details.className = "group";
-    details.open = state.openGroups[key] ?? !["untested", "research", "found", "found-partial", "safety"].includes(key);
-    details.innerHTML = `<summary>${escapeHtml(title)} <span class="count">${members.length}</span>${note ? `<span class="note">· ${escapeHtml(note)}</span>` : ""}</summary>`;
-    details.addEventListener("toggle", () => { state.openGroups[key] = details.open; saveOpenGroups(state.openGroups); });
-    for (const v of members) details.appendChild(vectorRow(v));
+    details.open = q ? true : state.openGroups[key] ?? !["untested", "research", "found", "found-partial", "safety"].includes(key);
+    details.innerHTML = `<summary>${escapeHtml(title)} <span class="count">${members.length.toLocaleString()}</span>${note ? `<span class="note">${escapeHtml(note[0].toUpperCase() + note.slice(1))}</span>` : ""}</summary>`;
+    details.addEventListener("toggle", () => {
+      if (!q) { state.openGroups[key] = details.open; saveOpenGroups(state.openGroups); }
+      if (details.open && !details.querySelector(".vec")) fill(details, key, members);
+    });
+    if (details.open) fill(details, key, members);
     box.appendChild(details);
   }
-  applyFilter();
-  updateSummary();
+  if (!shown) box.innerHTML = `<div class="nomatch">No dial matches${q ? ` “${escapeHtml(q)}”` : ""}${state.layer !== "all" ? ` on layer ${state.layer}` : ""}.</div>`;
+  renderActive();
 }
 
 function renderLayers() {
@@ -280,7 +391,7 @@ function renderLayers() {
   state.layers = [...new Set(state.vectors.map(layerOf))].sort((a, b) => a - b);
   if (!state.layers.includes(state.layer)) state.layer = "all";
   box.classList.toggle("on", state.layers.length > 1);
-  $("tagline").textContent = `Muse Glimmer 30B with features from its own ${state.layers.length > 1 ? `layers ${state.layers.join(", ").replace(/, (\d+)$/, " and $1")}` : `layer ${state.layers[0] ?? 24}`} added back in, live, per reply.`;
+  $("tagline").textContent = `Muse Glimmer 30B with ${state.vectors.length.toLocaleString()} dials from its own ${state.layers.length > 1 ? `layers ${state.layers.join(", ").replace(/, (\d+)$/, " and $1")}` : `layer ${state.layers[0] ?? 24}`} added back in, live, per reply.`;
   box.innerHTML = "<span>Layer</span>";
   for (const value of ["all", ...state.layers]) {
     const b = document.createElement("button");
@@ -289,23 +400,12 @@ function renderLayers() {
     b.setAttribute("aria-pressed", String(state.layer === value));
     b.addEventListener("click", () => {
       state.layer = value;
+      state.shown = {};
       try { localStorage.setItem("studio-layer", String(value)); } catch {}
       renderLayers();
-      applyFilter();
+      renderVectors();
     });
     box.appendChild(b);
-  }
-}
-
-function applyFilter() {
-  const q = ($("search").value || "").trim().toLowerCase();
-  for (const row of document.querySelectorAll(".vec")) {
-    row.hidden = (q && !row.dataset.search.includes(q)) || (state.layer !== "all" && +row.dataset.layer !== state.layer);
-  }
-  for (const group of document.querySelectorAll(".group")) {
-    const visible = [...group.querySelectorAll(".vec")].some((r) => !r.hidden);
-    group.hidden = !visible;
-    if (q && visible) group.open = true;
   }
 }
 
@@ -315,53 +415,62 @@ async function loadVectors() {
     const data = await res.json();
     state.vectors = data.vectors || [];
     if (!state.vectors.length) throw new Error("this server has no --steering-dir");
+    for (const v of state.vectors) {
+      v.search = `${v.name} ${v.label || ""} ${v.description || ""}`.toLowerCase();
+      state.byName.set(v.name, v);
+    }
     renderLayers();
     renderVectors();
   } catch (e) {
-    $("vectors").innerHTML = `<div class="sub err" style="padding:8px">Could not load features: ${escapeHtml(String(e.message || e))}</div>`;
+    $("vectors").innerHTML = `<div class="nomatch err">Could not load features: ${escapeHtml(String(e.message || e))}</div>`;
   }
 }
 
-async function stream(messages, steering, onDelta) {
+async function stream(messages, steering, onDelta, signal) {
   const body = {
     messages, stream: true, max_tokens: 1500, steering,
     chat_template_kwargs: { reasoning_strength: $("effort").value },
   };
-  const res = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try { msg = (await res.json()).error?.message || msg; } catch {}
-    if (BENT.test(msg)) return streamRaw(messages, steering, onDelta);
+    if (BENT.test(msg)) return streamRaw(messages, steering, onDelta, signal);
     throw new Error(msg);
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "", content = "", reasoning = "", timings = null;
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (!line.startsWith("data:")) continue;
-      const data = line.slice(5).trim();
-      if (data === "[DONE]") continue;
-      const chunk = JSON.parse(data);
-      if (chunk.error) {
-        if (BENT.test(chunk.error.message || "")) {
-          reader.cancel();
-          return streamRaw(messages, steering, onDelta);
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "[DONE]") continue;
+        const chunk = JSON.parse(data);
+        if (chunk.error) {
+          if (BENT.test(chunk.error.message || "")) {
+            reader.cancel();
+            return streamRaw(messages, steering, onDelta, signal);
+          }
+          throw new Error(chunk.error.message || "server error");
         }
-        throw new Error(chunk.error.message || "server error");
+        if (chunk.timings) timings = chunk.timings;
+        const d = chunk.choices?.[0]?.delta || {};
+        if (d.content) content += d.content;
+        if (d.reasoning_content) reasoning += d.reasoning_content;
+        onDelta(content, reasoning);
       }
-      if (chunk.timings) timings = chunk.timings;
-      const d = chunk.choices?.[0]?.delta || {};
-      if (d.content) content += d.content;
-      if (d.reasoning_content) reasoning += d.reasoning_content;
-      onDelta(content, reasoning);
     }
+  } catch (e) {
+    if (e.name === "AbortError") return { content, reasoning, timings, stopped: true };
+    throw e;
   }
   return { content, reasoning, timings };
 }
@@ -382,34 +491,39 @@ function splitChannels(raw) {
   return { content, reasoning };
 }
 
-async function streamRaw(messages, steering, onDelta) {
+async function streamRaw(messages, steering, onDelta, signal) {
   const headers = { "Content-Type": "application/json" };
-  const tpl = await fetch("apply-template", { method: "POST", headers,
+  const tpl = await fetch("apply-template", { method: "POST", headers, signal,
     body: JSON.stringify({ messages, chat_template_kwargs: { reasoning_strength: $("effort").value } }) });
   if (!tpl.ok) throw new Error(`HTTP ${tpl.status}`);
   const { prompt } = await tpl.json();
-  const res = await fetch("completion", { method: "POST", headers,
+  const res = await fetch("completion", { method: "POST", headers, signal,
     body: JSON.stringify({ prompt, stream: true, n_predict: 1500, steering }) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "", raw = "", timings = null, parts = { content: "", reasoning: "" };
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (!line.startsWith("data:")) continue;
-      const chunk = JSON.parse(line.slice(5).trim());
-      if (chunk.error) throw new Error(chunk.error.message || "server error");
-      if (chunk.timings) timings = chunk.timings;
-      raw += chunk.content || "";
-      parts = splitChannels(raw);
-      onDelta(parts.content, parts.reasoning);
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        const chunk = JSON.parse(line.slice(5).trim());
+        if (chunk.error) throw new Error(chunk.error.message || "server error");
+        if (chunk.timings) timings = chunk.timings;
+        raw += chunk.content || "";
+        parts = splitChannels(raw);
+        onDelta(parts.content, parts.reasoning);
+      }
     }
+  } catch (e) {
+    if (e.name === "AbortError") return { ...parts, timings, bent: true, stopped: true };
+    throw e;
   }
   return { ...parts, timings, bent: true };
 }
@@ -420,17 +534,32 @@ function replyBlock(container, mix, note = "") {
   const systemChip = system ? `<span class="chip plain" title="${escapeHtml(system.slice(0, 400))}">system prompt</span>` : "";
   el.innerHTML = `<div class="chips">${chipsFor(mix)}${systemChip}${note ? `<span class="chip plain" title="Earlier turns in this column are the steered replies, so the persona can carry over through context">${escapeHtml(note)}</span>` : ""}</div><div class="think" hidden></div><div class="body"></div><div class="stats"></div>`;
   container.appendChild(el);
+  let text = "";
   return {
     update(content, reasoning) {
+      text = content;
       const think = el.querySelector(".think");
       think.hidden = !($("showThink").checked && reasoning);
       think.textContent = reasoning;
       el.querySelector(".body").innerHTML = render(content || "…");
       scrollDown();
     },
-    done(timings, bent) {
-      const note = bent ? " · steering bent the reply format, shown raw" : "";
-      if (timings?.predicted_per_second) el.querySelector(".stats").textContent = `${timings.predicted_n} tokens · ${timings.predicted_per_second.toFixed(0)} tok/s${note}`;
+    done(r) {
+      const notes = [];
+      if (r.timings?.predicted_per_second) notes.push(`${r.timings.predicted_n} tokens · ${r.timings.predicted_per_second.toFixed(0)} tok/s`);
+      if (r.bent) notes.push("steering bent the reply format, shown raw");
+      if (r.stopped) notes.push("stopped");
+      const stats = el.querySelector(".stats");
+      stats.innerHTML = `<span>${escapeHtml(notes.join(" · "))}</span>`;
+      if (text) {
+        const copy = document.createElement("button");
+        copy.type = "button"; copy.textContent = "Copy";
+        copy.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(text); copy.textContent = "Copied"; } catch { copy.textContent = "Copy failed"; }
+          setTimeout(() => { copy.textContent = "Copy"; }, 1500);
+        });
+        stats.appendChild(copy);
+      }
     },
     fail(e) { el.querySelector(".body").innerHTML = `<p class="err">${escapeHtml(String(e.message || e))}</p>`; },
   };
@@ -438,9 +567,22 @@ function replyBlock(container, mix, note = "") {
 
 function scrollDown() { const log = $("log"); log.scrollTop = log.scrollHeight; }
 
+function showEmpty(title, line) {
+  $("log").innerHTML = `<div class="empty" id="empty"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(line)}</p>
+    <div class="starters">${STARTERS.map((s) => `<button type="button">${escapeHtml(s)}</button>`).join("")}</div></div>`;
+  for (const b of $("log").querySelectorAll(".starters button")) b.addEventListener("click", () => { if (!state.busy) send(b.textContent); });
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  $("send").textContent = busy ? "Stop" : "Send";
+  $("send").type = busy ? "button" : "submit";
+}
+
 async function send(text) {
-  state.busy = true;
-  $("send").disabled = true;
+  setBusy(true);
+  state.abort = new AbortController();
+  const signal = state.abort.signal;
   $("empty")?.remove();
   const log = $("log");
   const u = document.createElement("div");
@@ -469,29 +611,31 @@ async function send(text) {
   const messages = withSystem(state.history);
   const steered = replyBlock(holder, mix);
   try {
-    const r = await stream(messages, mix, steered.update);
-    steered.done(r.timings, r.bent);
-    // the conversation continues from the steered reply
+    const r = await stream(messages, mix, steered.update, signal);
+    steered.done(r);
+    // the conversation continues from the steered reply, as far as it got
     state.history.push({ role: "assistant", content: r.content });
   } catch (e) {
     steered.fail(e);
     state.history.pop();
   }
-  if (compare) {
+  if (compare && !signal.aborted) {
     const branch = state.plain;
     branch.history.push({ role: "user", content: text });
     const plain = replyBlock(holder, {}, branch.shared ? "shares earlier turns" : "");
     try {
-      const r = await stream(withSystem(branch.history), {}, plain.update);
-      plain.done(r.timings, r.bent);
+      const r = await stream(withSystem(branch.history), {}, plain.update, signal);
+      plain.done(r);
       branch.history.push({ role: "assistant", content: r.content });
     } catch (e) {
       plain.fail(e);
       branch.history.pop();
     }
+  } else if (compare) {
+    state.plain = null;  // the plain column never answered this turn, so it starts over next time
   }
-  state.busy = false;
-  $("send").disabled = false;
+  state.abort = null;
+  setBusy(false);
   $("input").focus();
 }
 
@@ -503,6 +647,7 @@ $("form").addEventListener("submit", (e) => {
   $("input").style.height = "";
   send(text);
 });
+$("send").addEventListener("click", () => { if (state.busy) state.abort?.abort(); });
 $("input").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
 });
@@ -511,8 +656,10 @@ $("clear").addEventListener("click", () => { state.mix = {}; renderVectors(); })
 $("reset").addEventListener("click", () => {
   state.history = [];
   state.plain = null;
-  $("log").innerHTML = `<div class="empty" id="empty">New chat. The dials stay where they are.</div>`;
+  showEmpty("New chat", "The dials stay where they are.");
 });
+$("openDials").addEventListener("click", () => $("app").classList.add("dials"));
+$("closeDials").addEventListener("click", () => $("app").classList.remove("dials"));
 // Tested mixes from presets.json next to this page. A preset replaces the current dials, and its system prompt, when it has one,
 // replaces the current system prompt.
 async function loadPresets() {
@@ -525,7 +672,7 @@ async function loadPresets() {
     } catch { continue; }
     for (const p of presets) {
       const mix = p.mix || {};
-      if (!Object.keys(mix).every((k) => state.vectors.some((v) => v.name === k))) continue;
+      if (!Object.keys(mix).every((k) => state.byName.has(k))) continue;
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = p.name;
@@ -540,11 +687,14 @@ async function loadPresets() {
   }
 }
 
-$("search").addEventListener("input", applyFilter);
+let searchTimer = null;
+$("search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.shown = {}; renderVectors(); }, 120); });
 $("system").addEventListener("input", updateSystemState);
 $("systemClear").addEventListener("click", () => setSystem(""));
 try { $("system").value = localStorage.getItem("studio-system") || ""; } catch {}
 updateSystemState();
+showEmpty("Steer Glimmer", "Turn up a dial, then say something. The dials apply to every reply and can change mid-conversation.");
+renderActive();
 loadVectors().then(loadPresets);
 </script>
 </body>

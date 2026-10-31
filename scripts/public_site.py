@@ -34,6 +34,8 @@ EXAMPLES = RESULTS / "steering-examples.json"
 NAV = [["Overview", "./"], ["Atlas", "atlas"], ["Layer 12", "layer-12"], ["Layer 24", "layer-24"], ["Layer 36", "layer-36"],
        ["Examples", "examples"], ["Steerable", "steerable"]]
 SITE = ROOT / "site"
+# Studio's private map pages link back to Studio; llama-server wants the .html
+STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], ["Layer 12", "layer-12.html"], ["Layer 24", "layer-24.html"], ["Layer 36", "layer-36.html"]]
 # near misses of the categories that a shared page should leave out too
 EXTRA = ""  # keyword list kept private, see scope/safety.py
 FLAGGED = re.compile("|".join(f"(?:{p})" for p in [*CATEGORIES.values(), EXTRA]), re.I)
@@ -157,26 +159,31 @@ def strings(value):
             yield from strings(v)
 
 
-def brand() -> str:
+def brand(product: str = "Glimmer Scope") -> str:
     mark = (SITE / "brand" / "mark.svg.html").read_text().strip()
-    return (f'<a class="brand" href="./" aria-label="Glimmer Scope, by Kroonen AI">{mark}'
+    return (f'<a class="brand" href="./" aria-label="{product}, by Kroonen AI">{mark}'
             '<span class="brand-word">kroonen<span>.ai</span></span><span class="brand-sep"></span>'
-            '<span class="brand-product">Glimmer Scope</span></a>')
+            f'<span class="brand-product">{product}</span></a>')
 
 
-def nav(current: str) -> str:
+def nav(current: str, links=NAV, label="Glimmer Scope") -> str:
     mark = ' aria-current="page"'
-    links = "".join(f'<a href="{href}"{mark if href == current else ""}>{text}</a>' for text, href in NAV)
-    return f'<nav class="site-nav" id="site-nav" aria-label="Glimmer Scope">{links}</nav>'
+    items = "".join(f'<a href="{href}"{mark if href == current else ""}>{text}</a>' for text, href in links)
+    return f'<nav class="site-nav" id="site-nav" aria-label="{label}">{items}</nav>'
 
 
-def page(template: str, current: str, data=None, src: str | None = None) -> str:
-    """Fill a template: the theme and header (brand + nav) for the shared site, then its data."""
+def page(template: str, current: str, data=None, src: str | None = None, private: bool = False) -> str:
+    """Fill a template: the theme and header (brand + nav) for the shared site, then its data.
+    private=True is Studio's own copy: every feature, safety coloring kept, Studio's nav."""
+    if private:
+        head = f'<div class="bar-head">{brand("Glimmer Studio")}{nav(current, STUDIO_NAV, "Glimmer Studio")}</div>'
+    else:
+        template = SAFETY_OPTION.sub("", template)
+        head = f'<div class="bar-head">{brand()}{nav(current)}</div>'
     header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}</div></header>'
-    html = (SAFETY_OPTION.sub("", template)
-            .replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
+    html = (template.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
             .replace("<!--HEADER-->", header)
-            .replace("<!--BARHEAD-->", f'<div class="bar-head">{brand()}{nav(current)}</div>'))
+            .replace("<!--BARHEAD-->", head))
     if src:
         html = html.replace("/*SRC*/null", json.dumps(src))
     if data is not None:
