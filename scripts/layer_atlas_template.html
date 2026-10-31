@@ -11,84 +11,144 @@
     :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --up: #ff6369; --down: #52a9ff;
                                       --dim: rgba(160,160,160,0.08); --plane: rgba(165,135,255,0.05); }
   }
+  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --up: #ff6369; --down: #52a9ff;
+                             --dim: rgba(160,160,160,0.08); --plane: rgba(165,135,255,0.05); }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; z-index: 2;
          background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
   .bar h1 { font-size: 15px; margin: 0 4px 0 0; }
   .bar .stat { color: var(--muted); font-size: 12px; }
+  .nav { display: flex; gap: 2px; width: 100%; overflow-x: auto; font-size: 13px; margin: -2px 0 0 -6px; }
+  .nav a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .nav a:hover { color: var(--ink); }
+  .nav a.home { color: var(--ink); font-weight: 650; }
+  .nav a[aria-current] { color: var(--ink); background: var(--bg); }
   input[type=search] { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; min-width: 200px; }
   select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
   label.check, label.slide { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
   label.slide b { color: var(--ink); font-weight: 600; min-width: 2.2em; font-variant-numeric: tabular-nums; }
   input[type=range] { accent-color: var(--accent); width: 110px; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  .more-toggle { display: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   canvas.dragging { cursor: grabbing; }
-  .tip { position: fixed; pointer-events: none; z-index: 3; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  .loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  .tip { position: fixed; pointer-events: none; z-index: 4; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
          padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
   .tip b { font-size: 13px; }
   .meta { color: var(--muted); font-size: 12px; }
-  .card { position: fixed; right: 12px; bottom: 12px; z-index: 2; width: min(400px, calc(100% - 24px)); max-height: 52vh; overflow: auto;
+  .results { position: fixed; z-index: 5; width: min(440px, calc(100% - 24px)); max-height: 50vh; overflow: auto; margin: 0; padding: 4px; list-style: none;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
+  .results button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .results button:hover, .results button:focus-visible { background: var(--bg); }
+  .results li.meta { padding: 6px 8px; }
+  .card { position: fixed; right: 12px; bottom: 12px; z-index: 3; width: min(400px, calc(100% - 24px)); max-height: 52vh; overflow: auto;
           background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
-  .card h2 { font-size: 14px; margin: 0 0 4px; }
   .card h3 { font-size: 12px; margin: 10px 0 2px; color: var(--muted); font-weight: 600; }
   .card ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
   .card li { padding: 2px 0; display: flex; gap: 8px; }
   .card li .cos { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 2.6em; }
   .card li a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; cursor: pointer; }
   .card li a:hover { text-decoration-color: var(--accent); }
-  .card .close { float: right; }
+  .card .close { float: right; margin-left: 8px; }
   .legend { position: fixed; left: 12px; bottom: 12px; z-index: 2; font-size: 12px; color: var(--muted); background: var(--panel);
             border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
   .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin: 0 4px 0 8px; }
-  @media (max-width: 640px) { input[type=search] { min-width: 0; flex: 1; } .legend { display: none; } }
+  .legend .chips { margin-top: 4px; }
+  .legend .chips i { width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  .legend .chips i:first-child { margin-left: 0; }
+  @media (max-width: 640px) {
+    .bar { top: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px 10px; }
+    input[type=search] { min-width: 0; flex: 1 1 100%; }
+    input[type=range] { width: 80px; }
+    .more-toggle { display: inline-block; }
+    .bar:not(.open) .more { display: none; }
+    .bar .stat { width: 100%; }
+    .legend { left: 8px; bottom: 8px; }
+    .legend .how { display: none; }
+    .legend:not(:has(.chips)) { display: none; }
+    .legend .chips { margin-top: 0; }
+    .card { right: 8px; bottom: 8px; width: calc(100% - 16px); }
+  }
 </style>
 </head>
 <body>
 <canvas id="map" aria-label="Stacked maps of SAE features at several layers"></canvas>
-<div class="bar">
-  <h1>Glimmer atlas</h1>
-  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features">
+<div class="loading" id="loading">Loading the atlas…</div>
+<div class="bar" id="bar">
+  <nav class="nav" id="nav" hidden></nav>
+  <h1 id="title">Glimmer atlas</h1>
+  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features" autocomplete="off">
   <label class="slide">Layer <input type="range" id="layer" min="0" step="1" aria-label="Layer"> <b id="layerName"></b></label>
   <label class="slide">Stack <input type="range" id="spread" min="0" max="100" value="0" aria-label="Stack the layers"></label>
-  <select id="color" aria-label="Color by">
+  <button type="button" class="more-toggle" id="more" aria-expanded="false">Options</button>
+  <select id="color" class="more" aria-label="Color by">
     <option value="region">Color: region</option>
     <option value="layer">Color: layer</option>
-    <option value="score">Color: steering score</option>
+    <option value="score">Color: steering</option>
     <option value="safety">Color: safety-relevant</option>
   </select>
-  <label class="check"><input type="checkbox" id="names" checked> Region names</label>
-  <button type="button" id="reset">Reset view</button>
+  <label class="check more"><input type="checkbox" id="names" checked> Region names</label>
+  <button type="button" id="reset" class="more">Reset view</button>
   <span class="stat" id="stat"></span>
 </div>
+<ul class="results" id="results"></ul>
 <div class="tip" id="tip"></div>
 <div class="card" id="card"></div>
 <div class="legend" id="legend"></div>
-<script>
-const DATA = /*DATA*/null;
+<script type="module">
+const NAV = /*NAV*/null, SRC = /*SRC*/null;
+const loading = document.getElementById("loading");
+let DATA = /*DATA*/null;
+if (!DATA) {
+  try { const r = await fetch(SRC); if (!r.ok) throw new Error(r.status); DATA = await r.json(); }
+  catch (e) { loading.textContent = "The atlas didn't load. Reload the page to try again."; throw e; }
+}
+loading.remove();
+
 const M = DATA.maps, NL = M.length;
 M.forEach((m, li) => m.points.forEach((p) => { p.li = li; }));
 const byId = M.map((m) => new Map(m.points.map((p) => [p.i, p])));
 const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
-const tip = document.getElementById("tip"), card = document.getElementById("card");
+const tip = document.getElementById("tip"), card = document.getElementById("card"), bar = document.getElementById("bar");
+const qEl = document.getElementById("q"), results = document.getElementById("results");
 const layerEl = document.getElementById("layer"), spreadEl = document.getElementById("spread"), colorEl = document.getElementById("color");
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
 const LAYER_HUES = [200, 275, 340, 30, 140];
+const layerColor = (li) => `hsl(${LAYER_HUES[li % LAYER_HUES.length]}, 70%, 55%)`;
+const scoreColor = (s) => (s >= 0.99 ? "#2fbf71" : s >= 0.66 ? "#f2a93b" : s > 0 ? "#6e8ef0" : "#8a6fa8");
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
+// the judge's score is concept x fluency / 9: 1 is on topic and fluent, 0.667 one of the two slips
+function steerWord(s) {
+  if (s == null) return "not steering-tested";
+  if (s >= 0.99) return "steers cleanly";
+  if (s >= 0.66) return "steers partly";
+  return s > 0 ? "weak effect" : "doesn't steer";
+}
+
+if (NAV) {
+  const nav = document.getElementById("nav");
+  nav.innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
+    NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("");
+  nav.hidden = false;
+  document.getElementById("title").hidden = true;
+  document.title = "Atlas · Glimmer Scope";
+}
 
 layerEl.max = NL - 1;
 layerEl.value = Math.floor(NL / 2);
-let all = M.flatMap((m) => m.points);
+const all = M.flatMap((m) => m.points);
 const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
 const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
 const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, half = Math.max(maxX - minX, maxY - minY) / 2;
-let view = { s: 1, ox: 0, oy: 0 }, matches = null, selected = null, grid = null;
+let view = { s: 1, ox: 0, oy: 0 }, fitScale = 1, matches = null, selected = null, grid = null;
 
 const active = () => +layerEl.value;
 const spread = () => +spreadEl.value / 100;
+const top = () => bar.getBoundingClientRect().bottom + 8;
 
 // plane coordinates in [-1, 1], then the stacked transform: rotate, tilt, lift deeper layers up
 function place(u, v, li, t) {
@@ -99,27 +159,29 @@ function place(u, v, li, t) {
   }
   return [u, v];
 }
+const plane = (p) => [(p.x - cx) / half, (p.y - cy) / half];
 function project(p, t = spread()) {
-  const [u, v] = place((p.x - cx) / half, (p.y - cy) / half, p.li, t);
+  const [u, v] = place(...plane(p), p.li, t);
   return [view.ox + view.s * u, view.oy + view.s * v];
 }
 const visibleLayers = () => (spread() > 0 ? M.map((_, li) => li) : [active()]);
 
 function fit() {
-  const t = spread(), w = canvas.clientWidth, h = canvas.clientHeight, top = 70, pad = 40;
+  const t = spread(), w = canvas.clientWidth, h = canvas.clientHeight, head = top(), pad = w < 640 ? 16 : 40;
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const li of visibleLayers()) for (const [u, v] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
     const [a, b] = place(u, v, li, t);
     x0 = Math.min(x0, a); x1 = Math.max(x1, a); y0 = Math.min(y0, b); y1 = Math.max(y1, b);
   }
-  const s = Math.min((w - pad * 2) / (x1 - x0), (h - top - pad * 2) / (y1 - y0));
-  view = { s, ox: w / 2 - s * (x0 + x1) / 2, oy: top + (h - top) / 2 - s * (y0 + y1) / 2 };
+  const s = Math.min((w - pad * 2) / (x1 - x0), (h - head - pad * 2) / (y1 - y0));
+  view = { s, ox: w / 2 - s * (x0 + x1) / 2, oy: head + (h - head) / 2 - s * (y0 + y1) / 2 };
+  fitScale = s;
 }
 
 function colorOf(p) {
   const mode = colorEl.value;
-  if (mode === "layer") return `hsl(${LAYER_HUES[p.li % LAYER_HUES.length]}, 70%, 55%)`;
-  if (mode === "score") return p.s == null ? css("--dim") : `hsl(${260 - 140 * p.s}, 75%, ${45 + 10 * p.s}%)`;
+  if (mode === "layer") return layerColor(p.li);
+  if (mode === "score") return p.s == null ? css("--dim") : scoreColor(p.s);
   if (mode === "safety") return p.f ? SAFETY[p.f] : css("--dim");
   return `hsl(${hue(p.r + p.li * 41)}, 62%, 52%)`;
 }
@@ -142,6 +204,20 @@ function lineage(p) {
     }
   }
   return edges;
+}
+
+// region names, biggest region first, leaving out any that would overlap one already drawn
+function drawNames(items) {
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--bg"), ink = css("--ink");
+  for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
+    const w = ctx.measureText(it.name).width + 10, box = [it.X - w / 2, it.Y - 9, it.X + w / 2, it.Y + 9];
+    if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) continue;
+    if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+    placed.push(box);
+    ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(it.name, it.X, it.Y);
+    ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y);
+  }
 }
 
 function draw() {
@@ -215,24 +291,18 @@ function draw() {
     }
   }
   if (document.getElementById("names").checked && !matches) {
-    const li = active(), m = M[li];
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-    for (const reg of m.regions) {
-      if (reg.size < 120 && view.s < 1200) continue;
-      const [X, Y] = project({ x: reg.x, y: reg.y, li }, t);
-      ctx.lineWidth = 3; ctx.strokeStyle = css("--bg"); ctx.strokeText(reg.name, X, Y);
-      ctx.fillStyle = ink; ctx.fillText(reg.name, X, Y);
-    }
+    const li = active();
+    drawNames(M[li].regions.map((reg) => { const [X, Y] = project({ x: reg.x, y: reg.y, li }, t); return { name: reg.name, size: reg.size, X, Y }; }));
   }
   const m = M[active()];
   document.getElementById("layerName").textContent = m.layer;
   const counts = matches ? M.map((mm, li) => `L${mm.layer} ${[...matches].filter((p) => p.li === li).length}`).join(" · ") : "";
   document.getElementById("stat").textContent = matches ? `matches: ${counts}`
-    : `layer ${m.layer}: ${m.points.length.toLocaleString()} features · ${m.regions.length} regions · ${m.tested.toLocaleString()} steering-tested`;
+    : `layer ${m.layer}: ${m.points.length.toLocaleString()} features · ${m.regions.filter((r) => r.size).length} regions · ${m.tested.toLocaleString()} steering-tested`;
 }
 
-function nearest(mx, my) {
-  let best = null, bd = 64;
+function nearest(mx, my, reach = 64) {
+  let best = null, bd = reach;
   const gx = Math.floor(mx / 12), gy = Math.floor(my / 12), t = spread();
   for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const p of grid.get(`${gx + i},${gy + j}`) || []) {
     const [X, Y] = project(p, t), d = (X - mx) ** 2 + (Y - my) ** 2 - (p.li === active() ? 20 : 0);
@@ -243,8 +313,8 @@ function nearest(mx, my) {
 
 function describe(p) {
   const m = M[p.li], reg = m.regions[p.r];
-  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)}` +
-    (p.s != null ? ` · steering ${p.s}` : "") + (p.f ? ` · flagged: ${esc(p.f)}` : "") + `</div>`;
+  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)} · ${steerWord(p.s)}` +
+    (p.f ? ` · flagged: ${esc(p.f)}` : "") + `</div>`;
 }
 function partnerList(p, dir) {
   const li = p.li + (dir === "u" ? 1 : -1);
@@ -259,6 +329,7 @@ function partnerList(p, dir) {
 }
 function select(p) {
   selected = p;
+  history.replaceState(null, "", p ? `#L${M[p.li].layer}-${p.i}` : location.pathname + location.search);
   if (!p) { card.style.display = "none"; draw(); return; }
   if (spread() === 0 && p.li !== active()) layerEl.value = p.li;
   card.innerHTML = `<button type="button" class="close">Close</button>${describe(p)}${partnerList(p, "d")}${partnerList(p, "u")}
@@ -268,33 +339,76 @@ function select(p) {
   card.querySelectorAll("a[data-id]").forEach((a) => { a.onclick = () => select(byId[+a.dataset.li].get(+a.dataset.id)); });
   draw();
 }
-
-function legend() {
-  document.getElementById("legend").innerHTML = spread() > 0
-    ? `Stacked: deeper layers above. Click a feature for its lineage<i style="background:${css("--down")}"></i>comes from<i style="background:${css("--up")}"></i>turns into`
-    : `Same subject, same place on every layer. Slide Layer to move through depth, Stack to pull the layers apart.`;
+// center a feature on its own layer, zoomed in, and open it
+function focus(p) {
+  if (!p) return;
+  if (spread() === 0) layerEl.value = p.li;
+  const w = canvas.clientWidth, h = canvas.clientHeight, head = top();
+  const [u, v] = place(...plane(p), p.li, spread());
+  view.s = Math.max(view.s, fitScale * 4);
+  view.ox = w / 2 - view.s * u; view.oy = head + (h - head) / 2.6 - view.s * v;
+  select(p);
 }
 
-let drag = null;
-canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false }; canvas.classList.add("dragging"); });
-window.addEventListener("mouseup", (e) => {
-  canvas.classList.remove("dragging");
-  if (drag && !drag.moved && e.target === canvas) select(nearest(e.clientX, e.clientY));
-  if (drag && drag.moved) draw();
-  drag = null;
+function legend() {
+  const el = document.getElementById("legend"), mode = colorEl.value;
+  const how = spread() > 0
+    ? `Stacked: deeper layers above. Click a feature for its lineage<i style="background:${css("--down")}"></i>comes from<i style="background:${css("--up")}"></i>turns into`
+    : `Same subject, same place on every layer. Slide Layer to move through depth, Stack to pull the layers apart.`;
+  let chips = "";
+  if (mode === "score") {
+    chips = [[1, "steers cleanly"], [0.667, "partly"], [0.333, "weak"], [0, "doesn't steer"]]
+      .map(([s, t]) => `<i style="background:${scoreColor(s)}"></i>${t}`).join("") + `<i style="background:${css("--muted")};opacity:.3"></i>not tested`;
+  } else if (mode === "layer") {
+    chips = M.map((m, li) => `<i style="background:${layerColor(li)}"></i>layer ${m.layer}`).join("");
+  }
+  el.innerHTML = `<div class="how">${how}</div>` + (chips ? `<div class="chips">${chips}</div>` : "");
+}
+
+// mouse, pen and touch: drag to move, wheel or pinch to zoom, tap or click to open
+const pointers = new Map();
+let drag = null, pinch = null;
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  results.style.display = "none"; tip.style.display = "none";
+  if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false };
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: view.s, ox: view.ox, oy: view.oy, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    drag = null;
+  }
+  canvas.classList.add("dragging");
 });
-window.addEventListener("mousemove", (e) => {
-  if (drag) {
-    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
-    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) drag.moved = true;
+canvas.addEventListener("pointermove", (e) => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()], f = Math.hypot(a.x - b.x, a.y - b.y) / pinch.d;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    view.s = pinch.s * f; view.ox = mx - (pinch.mx - pinch.ox) * f; view.oy = my - (pinch.my - pinch.oy) * f;
     tip.style.display = "none"; draw(); return;
   }
-  if (e.target !== canvas) { tip.style.display = "none"; return; }
+  if (drag) {
+    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > (e.pointerType === "mouse" ? 3 : 8)) drag.moved = true;
+    if (drag.moved) { tip.style.display = "none"; draw(); }
+    return;
+  }
+  if (e.pointerType !== "mouse") return;
   const p = nearest(e.clientX, e.clientY);
   if (!p) { tip.style.display = "none"; return; }
   tip.innerHTML = describe(p); tip.style.display = "block";
   tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 360) + "px"; tip.style.top = (e.clientY + 14) + "px";
 });
+function release(e) {
+  pointers.delete(e.pointerId);
+  if (drag && !drag.moved && e.type === "pointerup") select(nearest(e.clientX, e.clientY, e.pointerType === "mouse" ? 64 : 400));
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) { drag = null; canvas.classList.remove("dragging"); }
+}
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") tip.style.display = "none"; });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   const f = Math.exp(-e.deltaY * 0.0015);
@@ -302,10 +416,42 @@ canvas.addEventListener("wheel", (e) => {
   draw();
 }, { passive: false });
 
-document.getElementById("q").addEventListener("input", (e) => {
-  const q = e.target.value.trim().toLowerCase();
-  matches = q ? new Set(all.filter((p) => p.l.toLowerCase().includes(q) || String(p.i) === q)) : null;
+// search: matches light up on every layer, and the best ones are listed to jump to
+let found = [];
+function search() {
+  const q = qEl.value.trim().toLowerCase();
+  if (!q) { matches = null; found = []; results.style.display = "none"; draw(); return; }
+  found = all.filter((p) => p.l.toLowerCase().includes(q) || String(p.i) === q)
+    .sort((a, b) => (String(b.i) === q) - (String(a.i) === q) || (b.li === active()) - (a.li === active()) || (b.s ?? -1) - (a.s ?? -1));
+  matches = new Set(found);
+  const box = qEl.getBoundingClientRect();
+  results.style.left = Math.max(8, Math.min(box.left, window.innerWidth - results.offsetWidth - 8)) + "px";
+  results.style.top = box.bottom + 6 + "px";
+  results.innerHTML = found.length
+    ? found.slice(0, 12).map((p, n) => `<li><button type="button" data-n="${n}">${esc(p.l)} <span class="meta">layer ${M[p.li].layer} · #${p.i} · ${steerWord(p.s)}</span></button></li>`).join("") +
+      (found.length > 12 ? `<li class="meta">${found.length - 12} more lit up on the maps</li>` : "")
+    : `<li class="meta">No feature matches “${esc(q)}”.</li>`;
+  results.style.display = "block";
+  results.querySelectorAll("button").forEach((b) => { b.onclick = () => { results.style.display = "none"; focus(found[+b.dataset.n]); }; });
   draw();
+}
+qEl.addEventListener("input", search);
+qEl.addEventListener("focus", () => { if (qEl.value.trim()) search(); });
+qEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && found.length) { results.style.display = "none"; focus(found[0]); }
+  if (e.key === "Escape") { qEl.value = ""; search(); }
+  if (e.key === "ArrowDown") { e.preventDefault(); results.querySelector("button")?.focus(); }
+});
+results.addEventListener("keydown", (e) => {
+  const items = [...results.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+  if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : qEl).focus(); }
+  if (e.key === "Escape") { results.style.display = "none"; qEl.focus(); }
+});
+document.addEventListener("pointerdown", (e) => { if (!results.contains(e.target) && e.target !== qEl) results.style.display = "none"; });
+
+document.getElementById("more").addEventListener("click", (e) => {
+  const open = bar.classList.toggle("open"); e.target.setAttribute("aria-expanded", open); fit(); draw();
 });
 layerEl.addEventListener("input", draw);
 let lastSpread = 0;
@@ -315,7 +461,7 @@ spreadEl.addEventListener("input", () => {
   lastSpread = spread(); legend(); draw();
 });
 spreadEl.addEventListener("change", () => { fit(); draw(); });
-colorEl.addEventListener("change", draw);
+colorEl.addEventListener("change", () => { legend(); draw(); });
 document.getElementById("names").addEventListener("change", draw);
 document.getElementById("reset").addEventListener("click", () => { fit(); draw(); });
 window.addEventListener("keydown", (e) => {
@@ -327,6 +473,11 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("resize", () => { fit(); draw(); });
 fit(); legend(); draw();
+const link = location.hash.match(/^#L(\d+)-(\d+)$/);
+if (link) {
+  const li = M.findIndex((m) => m.layer === +link[1]);
+  if (li >= 0) focus(byId[li].get(+link[2]));
+}
 </script>
 </body>
 </html>

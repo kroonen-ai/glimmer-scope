@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steerable features · Glimmer Scope</title>
+<style>
+  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; --clean: #1f9d63; --part: #b7791f; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --clean: #4cc38a; --part: #e2a336; }
+  }
+  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --clean: #4cc38a; --part: #e2a336; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .nav { display: flex; gap: 2px; overflow-x: auto; font-size: 14px; max-width: 980px; margin: 0 auto; padding: 14px 10px 0; }
+  .nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+  .nav a:hover { color: var(--ink); }
+  .nav a.home { color: var(--ink); font-weight: 650; }
+  .nav a[aria-current] { color: var(--ink); background: var(--panel); }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
+  .lede { color: var(--muted); margin: 0 0 20px; max-width: 680px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 10px 0; border-bottom: 1px solid var(--line); }
+  input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 200px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 13px; color: var(--muted); background: var(--panel); border: 0; padding: 5px 10px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { color: var(--ink); background: var(--bg); font-weight: 600; }
+  label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  .count { color: var(--muted); font-size: 13px; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li.row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 4px 18px; padding: 12px 2px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  .label { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12.5px; }
+  .meta a { color: var(--muted); }
+  .does { font-size: 14px; }
+  .tag { font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .tag.clean { color: var(--clean); }
+  .tag.part { color: var(--part); }
+  .empty { color: var(--muted); padding: 24px 0; }
+  .more { display: block; margin: 18px auto 0; font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+  @media (max-width: 640px) {
+    li.row { grid-template-columns: 1fr auto; }
+    li.row .does { grid-column: 1 / -1; grid-row: 2; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav" id="nav"></nav>
+<main>
+  <h1>Features that steer</h1>
+  <p class="lede">Each of these was turned up while Glimmer answered four everyday prompts, and Muse Spark judged whether the answers moved toward the feature's subject and still read well. "Steers cleanly" means both, "partly" means one of the two slipped. What it does is Spark's own note on the steered answers.</p>
+  <div class="controls">
+    <input type="search" id="q" placeholder="Search features or what they do" aria-label="Search steerable features" autocomplete="off">
+    <div class="seg" id="layers" role="group" aria-label="Layer"></div>
+    <label class="check"><input type="checkbox" id="partly"> Include partly</label>
+    <span class="count" id="count" aria-live="polite"></span>
+  </div>
+  <ol id="list"></ol>
+  <button type="button" class="more" id="more" hidden>Show more</button>
+</main>
+<script>
+const NAV = /*NAV*/null;
+const ROWS = /*DATA*/null;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+document.getElementById("nav").innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
+  (NAV ? NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("") : "");
+
+const layers = [...new Set(ROWS.map((r) => r.layer))].sort((a, b) => a - b);
+let layer = null, shown = 150;
+const seg = document.getElementById("layers");
+seg.innerHTML = [`<button type="button" data-layer="" aria-pressed="true">All layers</button>`,
+  ...layers.map((l) => `<button type="button" data-layer="${l}" aria-pressed="false">Layer ${l}</button>`)].join("");
+seg.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  layer = b.dataset.layer ? +b.dataset.layer : null; shown = 150;
+  seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+  render();
+}));
+
+function render() {
+  const q = document.getElementById("q").value.trim().toLowerCase(), partly = document.getElementById("partly").checked;
+  const rows = ROWS.filter((r) => (partly || r.score >= 0.99) && (layer == null || r.layer === layer) &&
+    (!q || r.label.toLowerCase().includes(q) || r.does.toLowerCase().includes(q) || String(r.id) === q))
+    .sort((a, b) => b.score - a.score || a.layer - b.layer || a.label.localeCompare(b.label));
+  const clean = rows.filter((r) => r.score >= 0.99).length;
+  document.getElementById("count").textContent = `${rows.length.toLocaleString()} features` + (partly ? ` (${clean.toLocaleString()} clean)` : "");
+  document.getElementById("list").innerHTML = rows.length ? rows.slice(0, shown).map((r) => `<li class="row">
+      <div><div class="label">${esc(r.label)}</div><div class="meta">layer ${r.layer} · ${r.map ? `<a href="layer-${r.layer}#${r.id}">#${r.id} on the map</a>` : `#${r.id}`}${r.strength ? ` · best at ${r.strength}` : ""}</div></div>
+      <div class="does">${esc(r.does)}</div>
+      <div class="tag ${r.score >= 0.99 ? "clean" : "part"}">${r.score >= 0.99 ? "steers cleanly" : "steers partly"}</div>
+    </li>`).join("") : `<li class="empty">Nothing matches. Try another word${partly ? "" : ", or include the ones that steer partly"}.</li>`;
+  const more = document.getElementById("more");
+  more.hidden = rows.length <= shown;
+  more.textContent = `Show more (${(rows.length - shown).toLocaleString()} left)`;
+}
+document.getElementById("q").addEventListener("input", () => { shown = 150; render(); });
+document.getElementById("partly").addEventListener("change", () => { shown = 150; render(); });
+document.getElementById("more").addEventListener("click", () => { shown += 300; render(); });
+render();
+</script>
+</body>
+</html>

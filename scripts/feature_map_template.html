@@ -9,75 +9,151 @@
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --dim: rgba(160,160,160,0.08); }
   }
+  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --dim: rgba(160,160,160,0.08); }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; z-index: 2;
          background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
   .bar h1 { font-size: 15px; margin: 0 6px 0 0; }
   .bar .stat { color: var(--muted); font-size: 12px; }
+  .nav { display: flex; gap: 2px; width: 100%; overflow-x: auto; font-size: 13px; margin: -2px 0 0 -6px; }
+  .nav a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .nav a:hover { color: var(--ink); }
+  .nav a.home { color: var(--ink); font-weight: 650; }
+  .nav a[aria-current] { color: var(--ink); background: var(--bg); }
   input[type=search] { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; min-width: 220px; }
   select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
   label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  .more-toggle { display: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   canvas.dragging { cursor: grabbing; }
-  .tip { position: fixed; pointer-events: none; z-index: 3; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  .loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); }
+  .tip { position: fixed; pointer-events: none; z-index: 4; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
          padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
   .tip b { font-size: 13px; }
-  .tip .meta { color: var(--muted); margin-top: 3px; }
-  .card { position: fixed; right: 12px; bottom: 12px; z-index: 2; width: min(380px, calc(100% - 24px)); max-height: 46vh; overflow: auto;
+  .meta { color: var(--muted); font-size: 12px; }
+  .results { position: fixed; z-index: 5; width: min(420px, calc(100% - 24px)); max-height: 50vh; overflow: auto; margin: 0; padding: 4px; list-style: none;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
+  .results button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .results button:hover, .results button:focus-visible { background: var(--bg); }
+  .results li.meta { padding: 6px 8px; }
+  .card { position: fixed; right: 12px; bottom: 12px; z-index: 3; width: min(400px, calc(100% - 24px)); max-height: 46vh; overflow: auto;
           background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
-  .card h2 { font-size: 14px; margin: 0 0 6px; }
-  .card ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
-  .card .meta { color: var(--muted); font-size: 12px; }
-  .card button { float: right; }
-  @media (max-width: 640px) { input[type=search] { min-width: 0; flex: 1; } }
+  .card h2 { font-size: 14px; margin: 0 0 2px; }
+  .card h3 { font-size: 12px; margin: 12px 0 2px; color: var(--muted); font-weight: 600; }
+  .card ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
+  .card li { padding: 2px 0; }
+  .card a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; cursor: pointer; }
+  .card a:hover { text-decoration-color: var(--accent); }
+  .card .close { float: right; margin-left: 8px; }
+  .legend { position: fixed; left: 12px; bottom: 12px; z-index: 2; font-size: 12px; color: var(--muted); background: var(--panel);
+            border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  .legend i:first-child { margin-left: 0; }
+  @media (max-width: 640px) {
+    .bar { top: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px; }
+    input[type=search] { min-width: 0; flex: 1; }
+    .more-toggle { display: inline-block; }
+    .bar:not(.open) .more { display: none; }
+    .bar .stat { width: 100%; }
+    .legend { left: 8px; bottom: 8px; }
+    .card { right: 8px; bottom: 8px; width: calc(100% - 16px); }
+  }
 </style>
 </head>
 <body>
 <canvas id="map" aria-label="Map of SAE features"></canvas>
-<div class="bar">
-  <h1>Glimmer feature map</h1>
-  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features">
-  <select id="color" aria-label="Color by">
+<div class="loading" id="loading">Loading the map…</div>
+<div class="bar" id="bar">
+  <nav class="nav" id="nav" hidden></nav>
+  <h1 id="title">Glimmer feature map</h1>
+  <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features" autocomplete="off">
+  <button type="button" class="more-toggle" id="more" aria-expanded="false">Options</button>
+  <select id="color" class="more" aria-label="Color by">
     <option value="region">Color: region</option>
     <option value="kind">Color: kind</option>
-    <option value="score">Color: steering score</option>
+    <option value="score">Color: steering</option>
     <option value="safety">Color: safety-relevant</option>
   </select>
-  <label class="check"><input type="checkbox" id="names" checked> Region names</label>
-  <button type="button" id="reset">Reset view</button>
+  <label class="check more"><input type="checkbox" id="names" checked> Region names</label>
+  <button type="button" id="reset" class="more">Reset view</button>
   <span class="stat" id="stat"></span>
 </div>
+<ul class="results" id="results"></ul>
 <div class="tip" id="tip"></div>
 <div class="card" id="card"></div>
-<script>
-const DATA = /*DATA*/null;
-const P = DATA.points, R = DATA.regions;
+<div class="legend" id="legend"></div>
+<script type="module">
+const NAV = /*NAV*/null, SRC = /*SRC*/null;
+const loading = document.getElementById("loading");
+let DATA = /*DATA*/null;
+if (!DATA) {
+  try { const r = await fetch(SRC); if (!r.ok) throw new Error(r.status); DATA = await r.json(); }
+  catch (e) { loading.textContent = "The map didn't load. Reload the page to try again."; throw e; }
+}
+loading.remove();
+
+const P = DATA.points, R = DATA.regions, byId = new Map(P.map((p) => [p.id, p]));
 const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
-const tip = document.getElementById("tip"), card = document.getElementById("card");
+const tip = document.getElementById("tip"), card = document.getElementById("card"), bar = document.getElementById("bar");
+const qEl = document.getElementById("q"), results = document.getElementById("results"), colorEl = document.getElementById("color");
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
 const regionColor = R.map((r) => `hsl(${hue(r.id)}, 62%, 52%)`);
 const KINDS = { concept: "#7a4cf5", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f" };
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
-let xs = P.map((p) => p.x), ys = P.map((p) => p.y);
+const scoreColor = (s) => (s >= 0.99 ? "#2fbf71" : s >= 0.66 ? "#f2a93b" : s > 0 ? "#6e8ef0" : "#8a6fa8");
+// the judge's score is concept x fluency / 9: 1 is on topic and fluent, 0.667 one of the two slips
+function steerWord(s) {
+  if (s == null) return "not steering-tested";
+  if (s >= 0.99) return "steers cleanly";
+  if (s >= 0.66) return "steers partly";
+  return s > 0 ? "weak effect" : "doesn't steer";
+}
+const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-let view = null, query = "", matches = null;
+let view = null, fitScale = 1, matches = null, selected = null;
 
+if (NAV) {
+  const nav = document.getElementById("nav");
+  nav.innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
+    NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("");
+  nav.hidden = false;
+  document.getElementById("title").hidden = true;
+  document.title = `Layer ${DATA.layer} · Glimmer Scope`;
+}
+
+const top = () => bar.getBoundingClientRect().bottom + 8;
 function fit() {
-  const w = canvas.clientWidth, h = canvas.clientHeight, pad = 60;
-  const s = Math.min((w - pad * 2) / (maxX - minX), (h - pad * 2 - 50) / (maxY - minY));
-  view = { s, ox: w / 2 - s * (minX + maxX) / 2, oy: h / 2 + 25 - s * (minY + maxY) / 2 };
+  const w = canvas.clientWidth, h = canvas.clientHeight, pad = w < 640 ? 24 : 60, t = top();
+  const s = Math.min((w - pad * 2) / (maxX - minX), (h - t - pad * 2) / (maxY - minY));
+  view = { s, ox: w / 2 - s * (minX + maxX) / 2, oy: t + (h - t) / 2 - s * (minY + maxY) / 2 };
+  fitScale = s;
 }
 const sx = (x) => view.ox + view.s * x, sy = (y) => view.oy + view.s * y;
 
 function colorOf(p) {
-  const mode = document.getElementById("color").value;
+  const mode = colorEl.value;
   if (mode === "kind") return KINDS[p.kind] || "#888";
-  if (mode === "score") return p.score == null ? css("--dim") : `hsl(${260 - 140 * p.score}, 75%, ${45 + 10 * p.score}%)`;
+  if (mode === "score") return p.score == null ? css("--dim") : scoreColor(p.score);
   if (mode === "safety") return p.safety ? SAFETY[p.safety] : css("--dim");
   return regionColor[p.region];
+}
+
+// region names, biggest region first, leaving out any that would overlap one already drawn
+function drawNames(items) {
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
+  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--bg"), ink = css("--ink");
+  for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
+    const w = ctx.measureText(it.name).width + 10, box = [it.X - w / 2, it.Y - 9, it.X + w / 2, it.Y + 9];
+    if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) continue;
+    if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+    placed.push(box);
+    ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(it.name, it.X, it.Y);
+    ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y);
+  }
 }
 
 function draw() {
@@ -85,29 +161,32 @@ function draw() {
   canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-  const r = Math.max(1.2, Math.min(4, view.s * 0.06));
-  const dim = css("--dim");
+  const r = Math.max(1.2, Math.min(4, view.s * 0.06)), dim = css("--dim"), ink = css("--ink");
   for (const p of P) {
-    const lit = !matches || matches.has(p.id);
-    ctx.fillStyle = lit ? colorOf(p) : dim;
+    ctx.fillStyle = !matches || matches.has(p.id) ? colorOf(p) : dim;
     ctx.fillRect(sx(p.x) - r / 2, sy(p.y) - r / 2, r, r);
   }
   if (matches) {
-    ctx.strokeStyle = css("--ink"); ctx.lineWidth = 1;
+    ctx.strokeStyle = ink; ctx.lineWidth = 1;
     for (const p of P) if (matches.has(p.id)) { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r + 2.5, 0, 6.283); ctx.stroke(); }
   }
-  if (document.getElementById("names").checked && !matches) {
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-    for (const reg of R) {
-      if (reg.size < 120 && view.s < 40) continue;
-      const x = sx(reg.x), y = sy(reg.y);
-      ctx.lineWidth = 3; ctx.strokeStyle = css("--bg"); ctx.strokeText(reg.name, x, y);
-      ctx.fillStyle = css("--ink"); ctx.fillText(reg.name, x, y);
-    }
-  }
+  if (selected) { ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx(selected.x), sy(selected.y), r + 5, 0, 6.283); ctx.stroke(); }
+  if (document.getElementById("names").checked && !matches) drawNames(R.map((reg) => ({ name: reg.name, size: reg.size, X: sx(reg.x), Y: sy(reg.y) })));
   const tested = P.filter((p) => p.score != null).length;
-  document.getElementById("stat").textContent = (DATA.layer ? `layer ${DATA.layer} · ` : "") + `${P.length.toLocaleString()} features · ${R.length} regions · ${tested.toLocaleString()} steering-tested` + (matches ? ` · ${matches.size} match` : "");
+  document.getElementById("stat").textContent = (DATA.layer ? `layer ${DATA.layer} · ` : "") +
+    `${P.length.toLocaleString()} features · ${R.filter((r) => r.size).length} regions · ${tested.toLocaleString()} steering-tested` + (matches ? ` · ${matches.size} match` : "");
+}
+
+function legend() {
+  const el = document.getElementById("legend"), mode = colorEl.value;
+  if (mode === "score") {
+    el.innerHTML = [[1, "steers cleanly"], [0.667, "partly"], [0.333, "weak"], [0, "doesn't steer"]]
+      .map(([s, t]) => `<i style="background:${scoreColor(s)}"></i>${t}`).join("") + `<i style="background:${css("--muted")};opacity:.3"></i>not tested`;
+  } else if (mode === "kind") {
+    el.innerHTML = Object.entries(KINDS).map(([k, c]) => `<i style="background:${c}"></i>${k}`).join("");
+  } else {
+    el.textContent = matchMedia("(pointer: coarse)").matches ? "Tap a dot to see its region. Pinch to zoom." : "Click a dot to see its region. Scroll to zoom, drag to move.";
+  }
 }
 
 // nearest point under the cursor, through a coarse grid
@@ -116,8 +195,8 @@ function buildGrid() {
   grid = new Map();
   for (const p of P) { const key = `${Math.floor(sx(p.x) / 12)},${Math.floor(sy(p.y) / 12)}`; (grid.get(key) || grid.set(key, []).get(key)).push(p); }
 }
-function nearest(mx, my) {
-  let best = null, bd = 64;
+function nearest(mx, my, reach = 64) {
+  let best = null, bd = reach;
   const gx = Math.floor(mx / 12), gy = Math.floor(my / 12);
   for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const p of grid.get(`${gx + i},${gy + j}`) || []) {
     if (matches && !matches.has(p.id)) continue;
@@ -125,32 +204,82 @@ function nearest(mx, my) {
   }
   return best;
 }
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 function describe(p) {
   const reg = R[p.region];
-  return `<b>${esc(p.label)}</b><div class="meta">feature ${p.id} · ${esc(p.kind || "")} · region: ${esc(reg.name)}` +
-    (p.score != null ? ` · steering ${p.score}` : "") + (p.safety ? ` · flagged: ${esc(p.safety)}` : "") + `</div>`;
+  return `<b>${esc(p.label)}</b><div class="meta">feature ${p.id} · ${esc(p.kind || "")} · ${esc(reg.name)} · ${steerWord(p.score)}</div>`;
 }
 
-let drag = null;
-canvas.addEventListener("mousedown", (e) => { drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false }; canvas.classList.add("dragging"); });
-window.addEventListener("mouseup", (e) => {
-  canvas.classList.remove("dragging");
-  if (drag && !drag.moved) { const p = nearest(e.clientX, e.clientY); if (p) showRegion(p); }
-  if (drag && drag.moved) buildGrid();
-  drag = null;
+function select(p) {
+  selected = p;
+  history.replaceState(null, "", p ? `#${p.id}` : location.pathname + location.search);
+  if (!p) { card.style.display = "none"; draw(); return; }
+  const reg = R[p.region];
+  const members = P.filter((q) => q.region === reg.id);
+  const best = members.filter((q) => q.score >= 0.66 && q !== p).sort((a, b) => b.score - a.score).slice(0, 8);
+  const sample = members.filter((q) => q !== p).sort(() => 0.5 - Math.random()).slice(0, 10);
+  const item = (q) => `<li><a data-id="${q.id}">${esc(q.label)}</a> <span class="meta">#${q.id}${q.score != null ? " · " + steerWord(q.score) : ""}</span></li>`;
+  card.innerHTML = `<button type="button" class="close">Close</button>${describe(p)}
+    <h3>Region: ${esc(reg.name)} · ${members.length} features</h3>
+    ${best.length ? `<h3>Steer best here</h3><ul>${best.map(item).join("")}</ul>` : ""}
+    <h3>A few neighbors</h3><ul>${sample.map(item).join("")}</ul>`;
+  card.style.display = "block";
+  card.querySelector(".close").onclick = () => select(null);
+  card.querySelectorAll("a[data-id]").forEach((a) => { a.onclick = () => focus(byId.get(+a.dataset.id)); });
+  draw();
+}
+// center a feature, zoomed in, and open it
+function focus(p) {
+  if (!p) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight, t = top();
+  view.s = Math.max(view.s, fitScale * 5);
+  view.ox = w / 2 - view.s * p.x; view.oy = t + (h - t) / 2.6 - view.s * p.y;
+  buildGrid(); select(p);
+}
+
+// mouse, pen and touch: drag to move, wheel or pinch to zoom, tap or click to open
+const pointers = new Map();
+let drag = null, pinch = null;
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  results.style.display = "none"; tip.style.display = "none";
+  if (pointers.size === 1) drag = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy, moved: false };
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, s: view.s, ox: view.ox, oy: view.oy, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    drag = null;
+  }
+  canvas.classList.add("dragging");
 });
-window.addEventListener("mousemove", (e) => {
-  if (drag) {
-    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
-    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) drag.moved = true;
+canvas.addEventListener("pointermove", (e) => {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()], f = Math.hypot(a.x - b.x, a.y - b.y) / pinch.d;
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    view.s = pinch.s * f; view.ox = mx - (pinch.mx - pinch.ox) * f; view.oy = my - (pinch.my - pinch.oy) * f;
     tip.style.display = "none"; draw(); return;
   }
+  if (drag) {
+    view.ox = drag.ox + e.clientX - drag.x; view.oy = drag.oy + e.clientY - drag.y;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > (e.pointerType === "mouse" ? 3 : 8)) drag.moved = true;
+    if (drag.moved) { tip.style.display = "none"; draw(); }
+    return;
+  }
+  if (e.pointerType !== "mouse") return;
   const p = nearest(e.clientX, e.clientY);
   if (!p) { tip.style.display = "none"; return; }
   tip.innerHTML = describe(p); tip.style.display = "block";
   tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 360) + "px"; tip.style.top = (e.clientY + 14) + "px";
 });
+function release(e) {
+  pointers.delete(e.pointerId);
+  if (drag && !drag.moved && e.type === "pointerup") select(nearest(e.clientX, e.clientY, e.pointerType === "mouse" ? 64 : 400));
+  if (pointers.size < 2) pinch = null;
+  if (!pointers.size) { drag = null; canvas.classList.remove("dragging"); buildGrid(); }
+}
+canvas.addEventListener("pointerup", release);
+canvas.addEventListener("pointercancel", release);
+canvas.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") tip.style.display = "none"; });
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   const f = Math.exp(-e.deltaY * 0.0015);
@@ -158,29 +287,51 @@ canvas.addEventListener("wheel", (e) => {
   draw(); buildGrid();
 }, { passive: false });
 
-function showRegion(p) {
-  const reg = R[p.region];
-  const members = P.filter((q) => q.region === reg.id);
-  const top = members.filter((q) => q.score != null).sort((a, b) => b.score - a.score).slice(0, 8);
-  const sample = members.slice(0, 400).sort(() => 0.5 - Math.random()).slice(0, 10);
-  card.innerHTML = `<button type="button" id="close">Close</button><h2>${esc(reg.name)}</h2>
-    <div class="meta">${members.length} features · clicked: feature ${p.id}, ${esc(p.label)}</div>
-    ${top.length ? `<div class="meta" style="margin-top:8px">Best steering here</div><ul>${top.map((q) => `<li>${q.id} ${esc(q.label)} (${q.score})</li>`).join("")}</ul>` : ""}
-    <div class="meta" style="margin-top:8px">A few members</div><ul>${sample.map((q) => `<li>${q.id} ${esc(q.label)}</li>`).join("")}</ul>`;
-  card.style.display = "block";
-  document.getElementById("close").onclick = () => { card.style.display = "none"; };
-}
-
-document.getElementById("q").addEventListener("input", (e) => {
-  query = e.target.value.trim().toLowerCase();
-  matches = query ? new Set(P.filter((p) => p.label.toLowerCase().includes(query) || String(p.id) === query).map((p) => p.id)) : null;
+// search: matches light up on the map, and the best ones are listed to jump to
+let found = [];
+function search() {
+  const q = qEl.value.trim().toLowerCase();
+  if (!q) { matches = null; found = []; results.style.display = "none"; draw(); return; }
+  found = P.filter((p) => p.label.toLowerCase().includes(q) || String(p.id) === q)
+    .sort((a, b) => (String(b.id) === q) - (String(a.id) === q) || (b.score ?? -1) - (a.score ?? -1));
+  matches = new Set(found.map((p) => p.id));
+  const box = qEl.getBoundingClientRect();
+  results.style.left = Math.max(8, Math.min(box.left, window.innerWidth - results.offsetWidth - 8)) + "px";
+  results.style.top = box.bottom + 6 + "px";
+  results.innerHTML = found.length
+    ? found.slice(0, 12).map((p, n) => `<li><button type="button" data-n="${n}">${esc(p.label)} <span class="meta">#${p.id} · ${steerWord(p.score)}</span></button></li>`).join("") +
+      (found.length > 12 ? `<li class="meta">${found.length - 12} more lit up on the map</li>` : "")
+    : `<li class="meta">No feature matches “${esc(q)}”.</li>`;
+  results.style.display = "block";
+  results.querySelectorAll("button").forEach((b) => { b.onclick = () => { results.style.display = "none"; focus(found[+b.dataset.n]); }; });
   draw();
+}
+qEl.addEventListener("input", search);
+qEl.addEventListener("focus", () => { if (qEl.value.trim()) search(); });
+qEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && found.length) { results.style.display = "none"; focus(found[0]); }
+  if (e.key === "Escape") { qEl.value = ""; search(); }
+  if (e.key === "ArrowDown") { e.preventDefault(); results.querySelector("button")?.focus(); }
 });
-document.getElementById("color").addEventListener("change", draw);
+results.addEventListener("keydown", (e) => {
+  const items = [...results.querySelectorAll("button")], i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+  if (e.key === "ArrowUp") { e.preventDefault(); (i > 0 ? items[i - 1] : qEl).focus(); }
+  if (e.key === "Escape") { results.style.display = "none"; qEl.focus(); }
+});
+document.addEventListener("pointerdown", (e) => { if (!results.contains(e.target) && e.target !== qEl) results.style.display = "none"; });
+
+document.getElementById("more").addEventListener("click", (e) => {
+  const open = bar.classList.toggle("open"); e.target.setAttribute("aria-expanded", open); fit(); draw(); buildGrid();
+});
+colorEl.addEventListener("change", () => { legend(); draw(); });
 document.getElementById("names").addEventListener("change", draw);
 document.getElementById("reset").addEventListener("click", () => { fit(); draw(); buildGrid(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target === document.body) select(null); });
 window.addEventListener("resize", () => { fit(); draw(); buildGrid(); });
-fit(); draw(); buildGrid();
+fit(); legend(); draw(); buildGrid();
+const linked = byId.get(+location.hash.slice(1));
+if (/^#\d+$/.test(location.hash) && linked) focus(linked);
 </script>
 </body>
 </html>

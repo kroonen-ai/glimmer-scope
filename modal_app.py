@@ -691,3 +691,33 @@ def judge_file(path: str, out: str):
         for row in results:
             f.write(json.dumps(row) + "\n")
     print(f"judged {sum('error' not in r for r in results)} of {len(jobs)}, {sum('error' in r for r in results)} failed")
+
+
+@app.function(secrets=[meta_secret], cpu=1, timeout=3600)
+def ask_many(prompts: list[str], workers: int = 8) -> list[dict]:
+    """Muse Spark answers prompts written elsewhere: each comes back as {"reply"} or {"error"}."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from scope.llm import chat
+
+    def one(prompt):
+        try:
+            return {"reply": chat(prompt)}
+        except Exception as error:
+            return {"error": str(error)[:400]}
+
+    with ThreadPoolExecutor(workers) as pool:
+        return list(pool.map(one, prompts))
+
+
+@app.local_entrypoint()
+def ask_file(path: str, out: str):
+    """Answer a local jsonl of {"id", "prompt"} with ask_many; writes {"id", "reply" | "error"} lines."""
+    import json
+
+    jobs = [json.loads(line) for line in open(path)]
+    results = ask_many.remote([job["prompt"] for job in jobs])
+    with open(out, "w") as f:
+        for job, row in zip(jobs, results):
+            f.write(json.dumps({"id": job["id"], **row}) + "\n")
+    print(f"answered {sum('reply' in r for r in results)} of {len(jobs)}, {sum('error' in r for r in results)} failed")

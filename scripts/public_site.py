@@ -2,12 +2,15 @@
 
 Every feature flagged by flag_safety.py, and every label its patterns match (partner names
 included), is dropped along with the links that point at it. Regions are renamed from the labels
-that stay, so no region name carries a dropped word, and the safety coloring is taken out of the
-pages. Reads the built maps in results/ and site/index.html; writes results/site/, ready for
-`wrangler pages deploy`.
+that stay (by Muse Spark when name_regions.py has run, else by their shared words), so no region
+name carries a dropped word, and the safety coloring is taken out of the pages. Also writes the
+list of features that steer (steerable.html) and, from steering_examples.py, the examples page.
+Reads the built maps in results/ and the pages in site/; writes results/site/ for
+`wrangler deploy --config site/wrangler.jsonc`.
 
-    python scripts/public_site.py
+    python scripts/public_site.py [runs dir]
 """
+import os
 import json
 import re
 import shutil
@@ -19,9 +22,17 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from feature_map import region_names  # noqa: E402
 from flag_safety import CATEGORIES  # noqa: E402
+from layer_dials import PRIVATE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "results"
+SCRIPTS = Path(__file__).resolve().parent
+RUNS = Path(os.environ.get("GLIMMER_RUNS", "runs")).expanduser()
+MAPS = {12: "feature-map-L12.json", 24: "feature-map.json", 36: "feature-map-L36.json"}
+NAMES = RESULTS / "region-names.json"
+EXAMPLES = RESULTS / "steering-examples.json"
+NAV = [["Atlas", "atlas"], ["Layer 12", "layer-12"], ["Layer 24", "layer-24"], ["Layer 36", "layer-36"],
+       ["Examples", "examples"], ["Steerable", "steerable"]]
 # near misses of the categories that a shared page should leave out too
 EXTRA = ""  # keyword list kept private, see scope/safety.py
 FLAGGED = re.compile("|".join(f"(?:{p})" for p in [*CATEGORIES.values(), EXTRA]), re.I)
@@ -84,31 +95,113 @@ def public_map(data: dict) -> tuple[dict, int]:
     return data, before - len(data["points"])
 
 
-def page(template: str, data: dict) -> str:
-    return SAFETY_OPTION.sub("", template).replace("/*DATA*/null", json.dumps(data, separators=(",", ":")))
+def public_data() -> tuple[dict, dict, dict]:
+    """The filtered atlas and flat maps, with how many features each dropped."""
+    atlas, dropped = public_atlas(json.loads((RESULTS / "layer-atlas.json").read_text()))
+    counts = {"atlas": dropped}
+    maps = {}
+    for layer, name in MAPS.items():
+        data = json.loads((RESULTS / name).read_text())
+        assert data.setdefault("layer", layer) == layer  # layer 24's map predates the field
+        maps[layer], counts[layer] = public_map(data)
+    return atlas, maps, counts
+
+
+def apply_names(atlas: dict, maps: dict) -> int:
+    if not NAMES.exists():
+        return 0
+    names, used = json.loads(NAMES.read_text()), 0
+    for prefix, layer, regions in [("atlas", m["layer"], m["regions"]) for m in atlas["maps"]] + \
+                                  [("map", layer, d["regions"]) for layer, d in maps.items()]:
+        for reg in regions:
+            name = names.get(f"{prefix}/{layer}/{reg['id']}")
+            if name and reg["size"] and not FLAGGED.search(name):
+                reg["name"], used = name, used + 1
+    return used
+
+
+def steerable(runs: Path, maps: dict) -> list[dict]:
+    """Every feature that steers at least partly, minus anything dual use, dark or explicit."""
+    rows = []
+    for layer in MAPS:
+        run = runs / f"layer{layer}-64k-k64"
+        if not (run / "steerability.jsonl").exists():
+            continue
+        labels = {r["latent"]: r["label"] for r in map(json.loads, open(run / "labels.jsonl"))}
+        best = {}
+        for name in ("steerability.jsonl", "steerability-personas.jsonl"):
+            if (run / name).exists():
+                for r in map(json.loads, open(run / name)):
+                    if r["latent"] not in best or r["score"] > best[r["latent"]]["score"]:
+                        best[r["latent"]] = r
+        drop, on_map = flagged_latents(layer), {p["id"] for p in maps[layer]["points"]}
+        for latent, r in sorted(best.items()):
+            label, does = labels.get(latent) or r["label"], r.get("observed") or ""
+            text = f"{label} {r['label']} {does}"
+            if r["score"] < 0.66 or latent in drop or FLAGGED.search(text) or PRIVATE.search(text):
+                continue
+            rows.append({"layer": layer, "id": latent, "label": label, "does": does, "score": round(r["score"], 3),
+                         "strength": r.get("best_strength"), "map": latent in on_map})
+    return rows
+
+
+def strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for v in value.values():
+            yield from strings(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from strings(v)
+
+
+def page(template: str, current: str, data=None, src: str | None = None) -> str:
+    html = SAFETY_OPTION.sub("", template).replace("/*NAV*/null", json.dumps({"links": NAV, "current": current}))
+    if src:
+        html = html.replace("/*SRC*/null", json.dumps(src))
+    if data is not None:
+        html = html.replace("/*DATA*/null", json.dumps(data, separators=(",", ":")))
+    return html
 
 
 def main():
+    runs = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else RUNS
     out = RESULTS / "site"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
-    scripts = Path(__file__).resolve().parent
-    atlas, dropped = public_atlas(json.loads((RESULTS / "layer-atlas.json").read_text()))
-    (out / "atlas.html").write_text(page((scripts / "layer_atlas_template.html").read_text(), atlas))
-    print(f"atlas: dropped {dropped}, kept " + ", ".join(f"L{m['layer']} {len(m['points'])}" for m in atlas["maps"]))
-    stats = {"layers": {m["layer"]: {"concept": len(m["points"]), "labeled": m["labeled"]} for m in atlas["maps"]}}
-    for name, layer in (("feature-map.json", 24), ("feature-map-L36.json", 36)):
-        data = json.loads((RESULTS / name).read_text())
-        assert data.setdefault("layer", layer) == layer  # layer 24's map predates the field
-        data, dropped = public_map(data)
-        (out / f"layer-{layer}.html").write_text(page((scripts / "feature_map_template.html").read_text(), data))
-        print(f"layer {layer} map: dropped {dropped}, kept {len(data['points'])}")
-    for path in out.glob("*.html"):
+    atlas, maps, dropped = public_data()
+    named = apply_names(atlas, maps)
+    rows = steerable(runs, maps)
+    for data in (atlas, *maps.values(), rows):
+        hits = [s for s in strings(data) if FLAGGED.search(s)]
+        assert not hits, hits[:5]
+
+    (out / "atlas.json").write_text(json.dumps(atlas, separators=(",", ":")))
+    (out / "atlas.html").write_text(page((SCRIPTS / "layer_atlas_template.html").read_text(), "atlas", src="atlas.json"))
+    print(f"atlas: dropped {dropped['atlas']}, kept " + ", ".join(f"L{m['layer']} {len(m['points'])}" for m in atlas["maps"]))
+    for layer, data in maps.items():
+        (out / f"layer-{layer}.json").write_text(json.dumps(data, separators=(",", ":")))
+        (out / f"layer-{layer}.html").write_text(page((SCRIPTS / "feature_map_template.html").read_text(), f"layer-{layer}",
+                                                      src=f"layer-{layer}.json"))
+        print(f"layer {layer} map: dropped {dropped[layer]}, kept {len(data['points'])}")
+    print(f"{named} regions named by Muse Spark")
+
+    (out / "steerable.html").write_text(page((SCRIPTS / "steerable_template.html").read_text(), "steerable", data=rows))
+    print(f"steerable: {sum(r['score'] >= 0.99 for r in rows)} clean, {sum(r['score'] < 0.99 for r in rows)} partly")
+    if EXAMPLES.exists():
+        examples = json.loads(EXAMPLES.read_text())
+        examples["examples"] = [e for e in examples["examples"] if not FLAGGED.search(f"{e['label']} {e['does']}")]
+        (out / "examples.html").write_text(page((SCRIPTS / "examples_template.html").read_text(), "examples", data=examples))
+        print(f"examples: {len(examples['examples'])}")
+
+    for path in out.glob("*"):
         text = path.read_text()
         assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
-    shutil.copy(ROOT / "site" / "index.html", out / "index.html")
+    for name in ("index.html", "atlas-stack.jpg"):
+        if (ROOT / "site" / name).exists():
+            shutil.copy(ROOT / "site" / name, out / name)
     (out / "_headers").write_text("/*\n  X-Robots-Tag: noindex\n")
-    print(json.dumps(stats))
 
 
 if __name__ == "__main__":
