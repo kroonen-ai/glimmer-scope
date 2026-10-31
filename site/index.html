@@ -74,8 +74,8 @@
 <div class="wrap">
   <div class="stats">
     <div class="stat"><b>162,306</b><span>features labeled</span></div>
-    <div class="stat"><b>22,600</b><span>steering-tested</span></div>
-    <div class="stat"><b>1,245</b><span>steer cleanly</span></div>
+    <div class="stat"><b>40,020</b><span>steering-tested</span></div>
+    <div class="stat"><b>1,937</b><span>steer cleanly</span></div>
     <div class="stat"><b>3</b><span>layers mapped, 12, 24 and 36</span></div>
   </div>
 
@@ -106,13 +106,13 @@
       <table>
         <thead><tr><th>Layer</th><th>Features labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
         <tbody>
-          <tr><td>12</td><td>61,469</td><td>not yet</td><td></td><td></td></tr>
+          <tr><td>12</td><td>61,469</td><td>17,420</td><td class="clean">692</td><td>2,683</td></tr>
           <tr><td>24</td><td>48,977</td><td>10,622</td><td class="clean">1,110</td><td>3,367</td></tr>
           <tr><td>36</td><td>51,860</td><td>11,978</td><td class="clean">135</td><td>1,822</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">Layer 36 is a lot harder to steer than layer 24: far fewer of its features shift the text without breaking it. Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.</p>
+    <p class="note">How well features steer depends on depth: about 4% steer cleanly at layer 12, 10% at layer 24 and 1% at layer 36, where far fewer shift the text without breaking it. Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.</p>
   </section>
 </div>
 
