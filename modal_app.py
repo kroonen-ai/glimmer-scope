@@ -140,8 +140,8 @@ def smoke(layer: int = 24):
 
 @app.function(volumes=VOLUMES, gpu=GPU, timeout=24 * 3600)
 def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: int = 100_000_000, tag: str = "",
-          buffer_tokens: int = 1 << 20):
-    """``buffer_tokens`` is the GPU shuffle buffer; half of it fits a 96 GB card with room to spare."""
+          buffer_tokens: int = 1 << 19):
+    """``buffer_tokens`` is the GPU shuffle buffer: 512k tokens fits a 96 GB card (1M ran out of memory on refill)."""
     from scope import model as glimmer
     from scope.config import SAEConfig, TrainConfig
     from scope.train import train as run_training
