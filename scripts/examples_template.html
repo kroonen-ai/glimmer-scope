@@ -5,50 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Steering examples · Glimmer Scope</title>
 <style>
-  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
-  }
-  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .nav { display: flex; gap: 2px; overflow-x: auto; font-size: 14px; max-width: 1080px; margin: 0 auto; padding: 14px 10px 0; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
-  .nav a:hover { color: var(--ink); }
-  .nav a.home { color: var(--ink); font-weight: 650; }
-  .nav a[aria-current] { color: var(--ink); background: var(--panel); }
-  main { max-width: 1080px; margin: 0 auto; padding: 28px 16px 64px; }
-  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
-  .lede { color: var(--muted); margin: 0 0 22px; max-width: 700px; }
-  .prompts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 10px 0; }
-  .prompts span { color: var(--muted); font-size: 13px; margin-right: 2px; }
-  .prompts button { font: inherit; font-size: 14px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
-  .prompts button[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 8px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; }
-  .card.base { border-style: dashed; }
-  .card h2 { font-size: 15px; margin: 0; }
-  .meta { color: var(--muted); font-size: 12.5px; margin: 2px 0 10px; }
-  .meta a { color: var(--muted); }
-  .reply { white-space: pre-wrap; font-size: 14px; margin: 0; }
-  .note { color: var(--muted); font-size: 13.5px; margin-top: 24px; max-width: 700px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.55; }
+  .head { background: radial-gradient(900px 320px at 85% -20%, var(--accent-tint), transparent 70%); border-bottom: 1px solid var(--line); }
+  .head .wrap { padding-top: 44px; padding-bottom: 28px; }
+  h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter-spacing: -0.03em; margin: 0 0 12px; }
+  .lede { color: var(--muted); font-size: 17px; margin: 0; max-width: 46em; }
+  .prompts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; top: 57px; z-index: 5; background: var(--bg); padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .prompts span { color: var(--muted); font-size: 14px; margin-right: 4px; font-weight: 500; }
+  .prompts button { font: inherit; font-size: 14px; font-weight: 500; color: var(--ink); background: var(--surface); border: 0; border-radius: 999px; padding: 7px 14px; cursor: pointer; }
+  .prompts button:hover { color: var(--accent-ink); background: var(--accent-tint); }
+  .prompts button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; transition: border-color .15s, box-shadow .15s; }
+  .card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
+  .card.base { background: var(--surface); border-color: transparent; }
+  .card.base:hover { box-shadow: none; }
+  .tagline { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .pill { font-size: 12px; font-weight: 650; border-radius: 999px; padding: 3px 10px; color: var(--accent-ink); background: var(--accent-tint); text-decoration: none; }
+  a.pill:hover { background: var(--accent); color: var(--on-accent); }
+  .pill.muted { color: var(--muted); background: var(--panel); }
+  .card h2 { font-size: 17px; letter-spacing: -0.01em; margin: 0 0 10px; }
+  .reply { white-space: pre-wrap; font-size: 14.5px; margin: 0; }
+  .note { color: var(--muted); font-size: 14px; margin-top: 28px; max-width: 46em; }
+  @media (max-width: 720px) { .prompts { top: 92px; } .grid { grid-template-columns: 1fr; } }
 </style>
+<!--THEME-->
 </head>
 <body>
-<nav class="nav" id="nav"></nav>
-<main>
+<!--HEADER-->
+<section class="head"><div class="wrap">
+  <p class="eyebrow">Steering examples</p>
   <h1>What steering does</h1>
   <p class="lede">The same question, answered by Glimmer with one feature turned up. The first card is the normal answer with nothing turned up. Pick another question to see how each feature bends that one too.</p>
+</div></section>
+<main class="wrap">
   <div class="prompts" id="prompts" role="group" aria-label="Question"></div>
   <div class="grid" id="grid"></div>
   <p class="note" id="note"></p>
 </main>
 <script>
-const NAV = /*NAV*/null;
 const DATA = /*DATA*/null;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-document.getElementById("nav").innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
-  (NAV ? NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("") : "");
 // the replies are markdown: show bold, italics and bullets, drop heading marks
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
   .replace(/^#{1,6}\s*/gm, "").replace(/^(\s*)[*-] /gm, "$1• ");
@@ -62,10 +60,9 @@ prompts.querySelectorAll("button").forEach((b) => b.addEventListener("click", ()
 }));
 function render() {
   document.getElementById("grid").innerHTML =
-    `<article class="card base"><h2>Nothing turned up</h2><div class="meta">the normal answer</div><p class="reply">${md(DATA.baseline[pick])}</p></article>` +
-    DATA.examples.map((e) => `<article class="card"><h2>${esc(e.label)}</h2>
-      <div class="meta">layer ${e.layer} · <a href="layer-${e.layer}#${e.id}">feature ${e.id}</a> · strength ${e.strength}</div>
-      <p class="reply">${md(e.replies[pick])}</p></article>`).join("");
+    `<article class="card base"><div class="tagline"><span class="pill muted">Baseline</span></div><h2>Nothing turned up</h2><p class="reply">${md(DATA.baseline[pick])}</p></article>` +
+    DATA.examples.map((e) => `<article class="card"><div class="tagline"><a class="pill" href="layer-${e.layer}#${e.id}">Layer ${e.layer} · #${e.id}</a><span class="pill muted">strength ${e.strength}</span></div>
+      <h2>${esc(e.label[0].toUpperCase() + e.label.slice(1))}</h2><p class="reply">${md(e.replies[pick])}</p></article>`).join("");
 }
 document.getElementById("note").textContent = `Generated with greedy decoding, so the same settings give the same text, and cut at about ${DATA.tokens} tokens. ` +
   `Strength is how hard the feature is pushed, as a fraction of the typical size of the model's activations at that layer.`;

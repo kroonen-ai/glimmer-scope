@@ -4,83 +4,121 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Glimmer Scope</title>
+<title>Glimmer Scope · Kroonen AI</title>
 <style>
-  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
-  }
-  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .nav { display: flex; gap: 2px; overflow-x: auto; font-size: 14px; max-width: 980px; margin: 0 auto; padding: 14px 10px 0; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
-  .nav a:hover { color: var(--ink); }
-  .nav a.home { color: var(--ink); font-weight: 650; background: var(--panel); }
-  main { max-width: 820px; margin: 0 auto; padding: 40px 16px 64px; }
-  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
-  .lede { color: var(--muted); font-size: 18px; margin: 0 0 24px; }
-  p { margin: 0 0 16px; }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
-  .hero { display: block; margin: 0 0 28px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #111114; }
-  .hero img { display: block; width: 100%; height: auto; max-height: 560px; object-fit: contain; }
-  .hero:hover, .hero:focus-visible { border-color: var(--accent); }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-  .cards a { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; color: var(--ink); text-decoration: none; }
-  .cards a:hover, .cards a:focus-visible { border-color: var(--accent); }
-  .cards b { display: block; font-size: 16px; margin-bottom: 4px; }
-  .cards span { color: var(--muted); font-size: 14px; line-height: 1.45; display: block; }
-  .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
-  table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
-  th, td { text-align: right; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 16px; line-height: 1.6; }
+  .hero { background: radial-gradient(1100px 460px at 78% -12%, var(--accent-tint), transparent 70%); border-bottom: 1px solid var(--line); }
+  .hero .wrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 48px; align-items: center; padding-top: 64px; padding-bottom: 64px; }
+  h1 { font-size: clamp(36px, 5vw, 56px); line-height: 1.04; letter-spacing: -0.035em; font-weight: 700; margin: 0 0 18px; }
+  h1 span { color: var(--accent); }
+  .lede { font-size: 19px; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .shot { display: block; border-radius: 22px; overflow: hidden; background: #0b1118; border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot:hover { border-color: var(--accent); }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 40px auto 0; }
+  .stat { background: var(--surface); border-radius: 18px; padding: 20px 22px; }
+  .stat b { display: block; font-size: 34px; line-height: 1.1; letter-spacing: -0.03em; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 14.5px; }
+  section.block { margin-top: 72px; }
+  h2 { font-size: clamp(26px, 3vw, 34px); line-height: 1.15; letter-spacing: -0.025em; margin: 0 0 22px; }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .step { border: 1px solid var(--line); border-radius: 18px; padding: 22px; background: var(--panel); }
+  .step i { font-style: normal; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+            font-weight: 650; font-size: 14px; margin-bottom: 12px; }
+  .step h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -0.01em; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .cards a { display: flex; flex-direction: column; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px; color: var(--ink);
+             text-decoration: none; transition: border-color .15s, box-shadow .15s, transform .15s; }
+  .cards a:hover, .cards a:focus-visible { border-color: var(--accent); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .cards .tag { align-self: flex-start; font-size: 12px; font-weight: 650; color: var(--accent-ink); background: var(--accent-tint); border-radius: 999px; padding: 3px 10px; }
+  .cards b { font-size: 19px; letter-spacing: -0.01em; }
+  .cards span:not(.tag) { color: var(--muted); font-size: 15px; line-height: 1.5; }
+  .cards em { margin-top: auto; padding-top: 8px; font-style: normal; font-weight: 600; font-size: 14.5px; color: var(--accent-ink); }
+  .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 15.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 14px 20px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
   tr:last-child td { border-bottom: 0; }
-  th { color: var(--muted); font-weight: 600; font-size: 13px; }
-  .note { color: var(--muted); font-size: 14px; }
-  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
-  footer a { color: var(--muted); }
+  thead th { background: var(--surface); color: var(--muted); font-weight: 600; font-size: 13px; }
+  td.clean { color: var(--accent); font-weight: 650; }
+  .note { color: var(--muted); font-size: 15px; margin: 14px 0 0; max-width: 46em; }
+  .footer-brand { display: flex; align-items: center; gap: 10px; }
+  @media (max-width: 900px) {
+    .hero .wrap { grid-template-columns: 1fr; gap: 32px; padding-top: 40px; padding-bottom: 40px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .steps, .cards { grid-template-columns: 1fr; }
+  }
 </style>
+<!--THEME-->
 </head>
 <body>
-<nav class="nav" aria-label="Site">
-  <a class="home" href="./" aria-current="page">Glimmer Scope</a>
-  <a href="atlas">Atlas</a><a href="layer-12">Layer 12</a><a href="layer-24">Layer 24</a><a href="layer-36">Layer 36</a>
-  <a href="examples">Examples</a><a href="steerable">Steerable</a>
-</nav>
-<main>
-  <h1>Glimmer Scope</h1>
-  <p class="lede">Looking inside Muse Glimmer 30B, Meta's open weight model.</p>
+<!--HEADER-->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">Interpretability research</p>
+      <h1>Looking inside <span>Muse Glimmer</span></h1>
+      <p class="lede">Sparse autoencoders on three layers of Meta's open weight 30B model: every feature labeled, thousands tested for steering, and the maps to explore them.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="atlas">Open the atlas</a>
+        <a class="btn btn-ghost" href="examples">See steering in action</a>
+      </div>
+    </div>
+    <a class="shot" href="atlas" aria-label="Open the atlas"><img src="atlas-stack.jpg" width="960" height="860" alt="Three maps of Glimmer's features, one per layer, stacked in perspective: layer 12 at the bottom, 24 in the middle, 36 on top, each a cloud of colored dots grouped by subject."></a>
+  </div>
+</section>
 
-  <a class="hero" href="atlas"><img src="atlas-stack.jpg" width="960" height="860" alt="Three maps of Glimmer's features, one per layer, stacked in perspective: layer 12 at the bottom, 24 in the middle, 36 on top, each a cloud of colored dots grouped by subject."></a>
-
-  <p>I trained sparse autoencoders on three layers of Glimmer's residual stream, layers 12, 24 and 36, with 65,536 features each. Muse Spark 1.3 labeled every feature that fired on real text. Then I steering-tested thousands of them: push the feature's direction into the model while it writes, and check whether it starts talking about that thing and still makes sense.</p>
-  <p>The maps place each feature by the direction it writes into the model, so features that do similar things end up close together. The atlas lines the three layers up so the same subject sits in about the same spot on each one, and you can stack them to see how features carry through the depth of the model.</p>
-
-  <h2>Explore</h2>
-  <div class="cards">
-    <a href="atlas"><b>Atlas</b><span>Layers 12, 24 and 36 aligned. Slide between them or stack them, and click a feature to follow it up and down.</span></a>
-    <a href="examples"><b>Examples</b><span>The same questions answered with one feature turned up: pirates, fairies, rain, Spanish and more.</span></a>
-    <a href="steerable"><b>Steerable features</b><span>Every feature that steers, with what it does to the answers. Searchable.</span></a>
-    <a href="layer-12"><b>Layer 12</b><span>The early layer, about a quarter of the way in.</span></a>
-    <a href="layer-24"><b>Layer 24</b><span>The middle of the model, where most features steer.</span></a>
-    <a href="layer-36"><b>Layer 36</b><span>The deepest layer so far.</span></a>
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><b>162,306</b><span>features labeled</span></div>
+    <div class="stat"><b>22,600</b><span>steering-tested</span></div>
+    <div class="stat"><b>1,245</b><span>steer cleanly</span></div>
+    <div class="stat"><b>3</b><span>layers mapped, 12, 24 and 36</span></div>
   </div>
 
-  <h2>So far</h2>
-  <div class="table">
-    <table>
-      <thead><tr><th>Layer</th><th>Features labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
-      <tbody>
-        <tr><td>12</td><td>61,469</td><td>not yet</td><td></td><td></td></tr>
-        <tr><td>24</td><td>48,977</td><td>10,622</td><td>1,110</td><td>3,367</td></tr>
-        <tr><td>36</td><td>51,860</td><td>11,978</td><td>135</td><td>1,822</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p class="note" style="margin-top:12px">Layer 36 is a lot harder to steer than layer 24: far fewer of its features shift the text without breaking it.</p>
-  <p class="note">Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.</p>
+  <section class="block">
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step"><i>1</i><h3>Train</h3><p>A sparse autoencoder on each of layers 12, 24 and 36 of Glimmer's residual stream splits what the model computes into 65,536 features.</p></div>
+      <div class="step"><i>2</i><h3>Label</h3><p>Muse Spark 1.3 reads the text each feature fires on and labels every feature that fired at all.</p></div>
+      <div class="step"><i>3</i><h3>Steer</h3><p>Push a feature's direction into the model while it writes, and Spark judges whether the answer moves to that subject and still makes sense.</p></div>
+    </div>
+  </section>
 
-  <footer><a href="https://kroonen.ai">Kroonen AI</a> · updated October 31, 2026</footer>
-</main>
+  <section class="block">
+    <h2>Explore</h2>
+    <div class="cards">
+      <a href="atlas"><span class="tag">Map</span><b>Atlas</b><span>Layers 12, 24 and 36 aligned. Slide between them or stack them, and click a feature to follow it up and down.</span><em>Open the atlas</em></a>
+      <a href="examples"><span class="tag">Examples</span><b>What steering does</b><span>The same questions answered with one feature turned up: pirates, fairies, rain, Spanish and more.</span><em>See the examples</em></a>
+      <a href="steerable"><span class="tag">List</span><b>Steerable features</b><span>Every feature that steers, with what it does to the answers. Search by subject or effect.</span><em>Browse the list</em></a>
+      <a href="layer-12"><span class="tag">Map</span><b>Layer 12</b><span>About a quarter of the way into the model.</span><em>Open layer 12</em></a>
+      <a href="layer-24"><span class="tag">Map</span><b>Layer 24</b><span>The middle of the model, where features steer best.</span><em>Open layer 24</em></a>
+      <a href="layer-36"><span class="tag">Map</span><b>Layer 36</b><span>The deepest layer so far, about two thirds of the way in.</span><em>Open layer 36</em></a>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Per layer</h2>
+    <div class="table">
+      <table>
+        <thead><tr><th>Layer</th><th>Features labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
+        <tbody>
+          <tr><td>12</td><td>61,469</td><td>not yet</td><td></td><td></td></tr>
+          <tr><td>24</td><td>48,977</td><td>10,622</td><td class="clean">1,110</td><td>3,367</td></tr>
+          <tr><td>36</td><td>51,860</td><td>11,978</td><td class="clean">135</td><td>1,822</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Layer 36 is a lot harder to steer than layer 24: far fewer of its features shift the text without breaking it. Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.</p>
+  </section>
+</div>
+
+<footer class="site-footer"><div class="inner">
+  <span class="footer-brand"><a href="https://kroonen.ai">Kroonen AI</a></span>
+  <span>Updated October 31, 2026</span>
+</div></footer>
 </body>
 </html>

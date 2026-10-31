@@ -5,51 +5,53 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Steerable features · Glimmer Scope</title>
 <style>
-  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; --clean: #1f9d63; --part: #b7791f; }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --clean: #4cc38a; --part: #e2a336; }
-  }
-  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --clean: #4cc38a; --part: #e2a336; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .nav { display: flex; gap: 2px; overflow-x: auto; font-size: 14px; max-width: 980px; margin: 0 auto; padding: 14px 10px 0; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
-  .nav a:hover { color: var(--ink); }
-  .nav a.home { color: var(--ink); font-weight: 650; }
-  .nav a[aria-current] { color: var(--ink); background: var(--panel); }
-  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 64px; }
-  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
-  .lede { color: var(--muted); margin: 0 0 20px; max-width: 680px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 10px 0; border-bottom: 1px solid var(--line); }
-  input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; flex: 1; min-width: 200px; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .seg button { font: inherit; font-size: 13px; color: var(--muted); background: var(--panel); border: 0; padding: 5px 10px; cursor: pointer; }
-  .seg button + button { border-left: 1px solid var(--line); }
-  .seg button[aria-pressed="true"] { color: var(--ink); background: var(--bg); font-weight: 600; }
-  label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
-  .count { color: var(--muted); font-size: 13px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.5; }
+  .head { background: radial-gradient(900px 320px at 85% -20%, var(--accent-tint), transparent 70%); border-bottom: 1px solid var(--line); }
+  .head .wrap { padding-top: 44px; padding-bottom: 28px; }
+  h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1.08; letter-spacing: -0.03em; margin: 0 0 12px; }
+  .lede { color: var(--muted); font-size: 17px; margin: 0; max-width: 46em; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; position: sticky; top: 57px; z-index: 5; background: var(--bg); padding: 14px 0; border-bottom: 1px solid var(--line); }
+  input[type=search] { font: inherit; font-size: 15px; color: var(--ink); background: var(--surface); border: 1px solid transparent; border-radius: 999px; padding: 9px 16px; flex: 1; min-width: 220px; }
+  input[type=search]:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+  .seg { display: inline-flex; gap: 4px; background: var(--surface); border-radius: 999px; padding: 3px; }
+  .seg button { font: inherit; font-size: 14px; font-weight: 500; color: var(--ink); background: transparent; border: 0; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+  .seg button:hover { color: var(--accent-ink); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  label.check { display: flex; gap: 7px; align-items: center; font-size: 14px; color: var(--muted); }
+  input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+  .count { color: var(--muted); font-size: 14px; margin-left: auto; }
   ol { list-style: none; margin: 0; padding: 0; }
-  li.row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 4px 18px; padding: 12px 2px; border-bottom: 1px solid var(--line); align-items: baseline; }
-  .label { font-weight: 600; }
-  .meta { color: var(--muted); font-size: 12.5px; }
-  .meta a { color: var(--muted); }
-  .does { font-size: 14px; }
-  .tag { font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .tag.clean { color: var(--clean); }
-  .tag.part { color: var(--part); }
-  .empty { color: var(--muted); padding: 24px 0; }
-  .more { display: block; margin: 18px auto 0; font: inherit; font-size: 14px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
-  @media (max-width: 640px) {
+  li.row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto; gap: 4px 24px; padding: 16px 4px; border-bottom: 1px solid var(--line); align-items: baseline; }
+  li.row:hover { background: linear-gradient(90deg, var(--accent-tint), transparent 60%); }
+  .label { font-weight: 600; font-size: 15.5px; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .meta a { color: var(--accent-ink); text-decoration: none; font-weight: 500; }
+  .meta a:hover { text-decoration: underline; }
+  .does { font-size: 15px; }
+  .tag { font-size: 12px; font-weight: 650; white-space: nowrap; border-radius: 999px; padding: 3px 10px; }
+  .tag.clean { color: var(--accent-ink); background: var(--accent-tint); }
+  .tag.part { color: #9a5b00; background: #fff1d6; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.part { color: #f5c46b; background: rgba(245,165,36,0.14); } }
+  .empty { color: var(--muted); padding: 32px 0; }
+  .more { display: block; margin: 24px auto 0; }
+  @media (max-width: 720px) {
+    .controls { top: 92px; }
+    .count { margin-left: 0; width: 100%; }
     li.row { grid-template-columns: 1fr auto; }
     li.row .does { grid-column: 1 / -1; grid-row: 2; }
   }
 </style>
+<!--THEME-->
 </head>
 <body>
-<nav class="nav" id="nav"></nav>
-<main>
+<!--HEADER-->
+<section class="head"><div class="wrap">
+  <p class="eyebrow">Steerable features</p>
   <h1>Features that steer</h1>
   <p class="lede">Each of these was turned up while Glimmer answered four everyday prompts, and Muse Spark judged whether the answers moved toward the feature's subject and still read well. "Steers cleanly" means both, "partly" means one of the two slipped. What it does is Spark's own note on the steered answers.</p>
+</div></section>
+<main class="wrap">
   <div class="controls">
     <input type="search" id="q" placeholder="Search features or what they do" aria-label="Search steerable features" autocomplete="off">
     <div class="seg" id="layers" role="group" aria-label="Layer"></div>
@@ -57,15 +59,11 @@
     <span class="count" id="count" aria-live="polite"></span>
   </div>
   <ol id="list"></ol>
-  <button type="button" class="more" id="more" hidden>Show more</button>
+  <button type="button" class="more btn btn-ghost" id="more" hidden>Show more</button>
 </main>
 <script>
-const NAV = /*NAV*/null;
 const ROWS = /*DATA*/null;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-document.getElementById("nav").innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
-  (NAV ? NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("") : "");
-
 const layers = [...new Set(ROWS.map((r) => r.layer))].sort((a, b) => a - b);
 let layer = null, shown = 150;
 const seg = document.getElementById("layers");

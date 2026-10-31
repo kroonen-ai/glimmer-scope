@@ -31,8 +31,9 @@ RUNS = Path(os.environ.get("GLIMMER_RUNS", "runs")).expanduser()
 MAPS = {12: "feature-map-L12.json", 24: "feature-map.json", 36: "feature-map-L36.json"}
 NAMES = RESULTS / "region-names.json"
 EXAMPLES = RESULTS / "steering-examples.json"
-NAV = [["Atlas", "atlas"], ["Layer 12", "layer-12"], ["Layer 24", "layer-24"], ["Layer 36", "layer-36"],
+NAV = [["Overview", "./"], ["Atlas", "atlas"], ["Layer 12", "layer-12"], ["Layer 24", "layer-24"], ["Layer 36", "layer-36"],
        ["Examples", "examples"], ["Steerable", "steerable"]]
+SITE = ROOT / "site"
 # near misses of the categories that a shared page should leave out too
 EXTRA = ""  # keyword list kept private, see scope/safety.py
 FLAGGED = re.compile("|".join(f"(?:{p})" for p in [*CATEGORIES.values(), EXTRA]), re.I)
@@ -156,8 +157,26 @@ def strings(value):
             yield from strings(v)
 
 
+def brand() -> str:
+    mark = (SITE / "brand" / "mark.svg.html").read_text().strip()
+    return (f'<a class="brand" href="./" aria-label="Glimmer Scope, by Kroonen AI">{mark}'
+            '<span class="brand-word">kroonen<span>.ai</span></span><span class="brand-sep"></span>'
+            '<span class="brand-product">Glimmer Scope</span></a>')
+
+
+def nav(current: str) -> str:
+    mark = ' aria-current="page"'
+    links = "".join(f'<a href="{href}"{mark if href == current else ""}>{text}</a>' for text, href in NAV)
+    return f'<nav class="site-nav" id="site-nav" aria-label="Glimmer Scope">{links}</nav>'
+
+
 def page(template: str, current: str, data=None, src: str | None = None) -> str:
-    html = SAFETY_OPTION.sub("", template).replace("/*NAV*/null", json.dumps({"links": NAV, "current": current}))
+    """Fill a template: the theme and header (brand + nav) for the shared site, then its data."""
+    header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}</div></header>'
+    html = (SAFETY_OPTION.sub("", template)
+            .replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
+            .replace("<!--HEADER-->", header)
+            .replace("<!--BARHEAD-->", f'<div class="bar-head">{brand()}{nav(current)}</div>'))
     if src:
         html = html.replace("/*SRC*/null", json.dumps(src))
     if data is not None:
@@ -195,12 +214,13 @@ def main():
         (out / "examples.html").write_text(page((SCRIPTS / "examples_template.html").read_text(), "examples", data=examples))
         print(f"examples: {len(examples['examples'])}")
 
-    for path in out.glob("*"):
+    for path in out.glob("*.*"):
         text = path.read_text()
         assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
-    for name in ("index.html", "atlas-stack.jpg"):
-        if (ROOT / "site" / name).exists():
-            shutil.copy(ROOT / "site" / name, out / name)
+    (out / "index.html").write_text(page((SITE / "index.html").read_text(), "./"))
+    for name in ("theme.css", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
+        (out / name).parent.mkdir(exist_ok=True)
+        shutil.copy(SITE / name, out / name)
     (out / "_headers").write_text("/*\n  X-Robots-Tag: noindex\n")
 
 

@@ -5,53 +5,64 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Glimmer Feature Map</title>
 <style>
-  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; --dim: rgba(120,120,120,0.10); }
+  :root { --bg: #ffffff; --surface: #f1f4f8; --panel: #ffffff; --ink: #1c2b33; --muted: #5d6c7b; --line: #dde4ec;
+          --accent: #0064e0; --accent-hover: #0050b5; --accent-tint: #e7f0fd; --accent-ink: #0050b5; --on-accent: #ffffff;
+          --map: #f5f8fb; --dim: rgba(93,108,123,0.10); --plane: rgba(0,100,224,0.035); --up: #e5484d; --down: #0064e0;
+          --shadow: 0 1px 2px rgba(28,43,51,0.06), 0 8px 24px rgba(28,43,51,0.08);
+          --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --dim: rgba(160,160,160,0.08); }
+    :root:not([data-theme="light"]) { --bg: #0b1118; --surface: #111a24; --panel: #131d28; --ink: #e8eef4; --muted: #94a4b3; --line: #233242;
+      --accent: #2d88ff; --accent-hover: #5aa2ff; --accent-tint: rgba(45,136,255,0.15); --accent-ink: #84b8ff; --map: #0b1118;
+      --dim: rgba(148,164,179,0.09); --plane: rgba(45,136,255,0.05); --up: #ff6369; --down: #2d88ff; --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35); }
   }
-  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; --dim: rgba(160,160,160,0.08); }
+  :root[data-theme="dark"] { --bg: #0b1118; --surface: #111a24; --panel: #131d28; --ink: #e8eef4; --muted: #94a4b3; --line: #233242;
+    --accent: #2d88ff; --accent-hover: #5aa2ff; --accent-tint: rgba(45,136,255,0.15); --accent-ink: #84b8ff; --map: #0b1118;
+    --dim: rgba(148,164,179,0.09); --plane: rgba(45,136,255,0.05); --up: #ff6369; --down: #2d88ff; --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35); }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; z-index: 2;
-         background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-  .bar h1 { font-size: 15px; margin: 0 6px 0 0; }
-  .bar .stat { color: var(--muted); font-size: 12px; }
-  .nav { display: flex; gap: 2px; width: 100%; overflow-x: auto; font-size: 13px; margin: -2px 0 0 -6px; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
-  .nav a:hover { color: var(--ink); }
-  .nav a.home { color: var(--ink); font-weight: 650; }
-  .nav a[aria-current] { color: var(--ink); background: var(--bg); }
-  input[type=search] { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; min-width: 220px; }
-  select, button { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
-  label.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  html, body { height: 100%; margin: 0; background: var(--map); color: var(--ink); font: 14px/1.45 var(--font); }
+  .bar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px 12px; flex-wrap: wrap; align-items: center; z-index: 2;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 10px 12px; box-shadow: var(--shadow); }
+  .bar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; width: 100%; padding: 0 2px 10px; margin-bottom: 2px; border-bottom: 1px solid var(--line); }
+  .bar h1 { font-size: 15px; margin: 0 6px 0 4px; }
+  .bar .stat { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+  input[type=search] { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid transparent; border-radius: 999px; padding: 7px 14px; min-width: 260px; }
+  input[type=search]:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+  select, button { font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink); background: var(--surface); border: 1px solid transparent; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  select:hover, button:hover { background: var(--accent-tint); color: var(--accent-ink); }
+  input[type=checkbox], input[type=range] { accent-color: var(--accent); }
+  label.check, label.slide { display: flex; gap: 6px; align-items: center; font-size: 13.5px; color: var(--muted); }
+  label.slide b { color: var(--accent-ink); font-weight: 650; min-width: 2.2em; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 110px; }
   .more-toggle { display: none; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
   canvas.dragging { cursor: grabbing; }
   .loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); }
-  .tip { position: fixed; pointer-events: none; z-index: 4; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-         padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
+  .tip { position: fixed; pointer-events: none; z-index: 4; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+         padding: 9px 12px; font-size: 12.5px; box-shadow: var(--shadow); display: none; }
   .tip b { font-size: 13px; }
   .meta { color: var(--muted); font-size: 12px; }
-  .results { position: fixed; z-index: 5; width: min(420px, calc(100% - 24px)); max-height: 50vh; overflow: auto; margin: 0; padding: 4px; list-style: none;
-             background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,0.18); display: none; }
-  .results button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
-  .results button:hover, .results button:focus-visible { background: var(--bg); }
-  .results li.meta { padding: 6px 8px; }
-  .card { position: fixed; right: 12px; bottom: 12px; z-index: 3; width: min(400px, calc(100% - 24px)); max-height: 46vh; overflow: auto;
-          background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: none; }
-  .card h2 { font-size: 14px; margin: 0 0 2px; }
-  .card h3 { font-size: 12px; margin: 12px 0 2px; color: var(--muted); font-weight: 600; }
+  .results { position: fixed; z-index: 5; width: min(440px, calc(100% - 24px)); max-height: 50vh; overflow: auto; margin: 0; padding: 6px; list-style: none;
+             background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); display: none; }
+  .results button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 7px 10px; border-radius: 10px; cursor: pointer; font-size: 13px; }
+  .results button:hover, .results button:focus-visible { background: var(--accent-tint); }
+  .results li.meta { padding: 6px 10px; }
+  .card { position: fixed; right: 12px; bottom: 12px; z-index: 3; width: min(400px, calc(100% - 24px)); max-height: 50vh; overflow: auto;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px 16px; display: none; box-shadow: var(--shadow); }
+  .card b { font-size: 14px; }
+  .card h3 { font-size: 11.5px; margin: 14px 0 4px; color: var(--accent-ink); font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; }
   .card ul { margin: 2px 0 0; padding-left: 0; list-style: none; font-size: 12.5px; }
-  .card li { padding: 2px 0; }
-  .card a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; cursor: pointer; }
-  .card a:hover { text-decoration-color: var(--accent); }
+  .card li { padding: 3px 0; }
+  .card a { color: var(--ink); text-decoration: none; cursor: pointer; font-weight: 500; }
+  .card a:hover { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
   .card .close { float: right; margin-left: 8px; }
   .legend { position: fixed; left: 12px; bottom: 12px; z-index: 2; font-size: 12px; color: var(--muted); background: var(--panel);
-            border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; max-width: calc(100% - 24px); }
+            border: 1px solid var(--line); border-radius: 12px; padding: 7px 12px; max-width: calc(100% - 24px); box-shadow: var(--shadow); }
   .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
   .legend i:first-child { margin-left: 0; }
   @media (max-width: 640px) {
-    .bar { top: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px; }
+    .bar { top: 8px; left: 8px; right: 8px; padding: 8px; gap: 8px; border-radius: 16px; }
+    .bar-head { flex-direction: column; align-items: stretch; padding-bottom: 6px; }
+    .bar .stat { margin-left: 0; }
     input[type=search] { min-width: 0; flex: 1; }
     .more-toggle { display: inline-block; }
     .bar:not(.open) .more { display: none; }
@@ -60,12 +71,13 @@
     .card { right: 8px; bottom: 8px; width: calc(100% - 16px); }
   }
 </style>
+<!--THEME-->
 </head>
 <body>
 <canvas id="map" aria-label="Map of SAE features"></canvas>
 <div class="loading" id="loading">Loading the map…</div>
 <div class="bar" id="bar">
-  <nav class="nav" id="nav" hidden></nav>
+  <!--BARHEAD-->
   <h1 id="title">Glimmer feature map</h1>
   <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features" autocomplete="off">
   <button type="button" class="more-toggle" id="more" aria-expanded="false">Options</button>
@@ -84,7 +96,7 @@
 <div class="card" id="card"></div>
 <div class="legend" id="legend"></div>
 <script type="module">
-const NAV = /*NAV*/null, SRC = /*SRC*/null;
+const SRC = /*SRC*/null;
 const loading = document.getElementById("loading");
 let DATA = /*DATA*/null;
 if (!DATA) {
@@ -101,10 +113,10 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
 const regionColor = R.map((r) => `hsl(${hue(r.id)}, 62%, 52%)`);
-const KINDS = { concept: "#7a4cf5", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f" };
+const KINDS = { concept: "#0064e0", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f" };
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
-const scoreColor = (s) => (s >= 0.99 ? "#2fbf71" : s >= 0.66 ? "#f2a93b" : s > 0 ? "#6e8ef0" : "#8a6fa8");
+const scoreColor = (s) => (s >= 0.99 ? css("--accent") : s >= 0.66 ? "#f5a524" : s > 0 ? "#8fa3b5" : "#7b6ba8");
 // the judge's score is concept x fluency / 9: 1 is on topic and fluent, 0.667 one of the two slips
 function steerWord(s) {
   if (s == null) return "not steering-tested";
@@ -116,11 +128,7 @@ const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
 let view = null, fitScale = 1, matches = null, selected = null;
 
-if (NAV) {
-  const nav = document.getElementById("nav");
-  nav.innerHTML = `<a class="home" href="./">Glimmer Scope</a>` +
-    NAV.links.map(([text, href]) => `<a href="${href}"${href === NAV.current ? ' aria-current="page"' : ""}>${esc(text)}</a>`).join("");
-  nav.hidden = false;
+if (document.getElementById("site-nav")) {  // the shared site's header names the page
   document.getElementById("title").hidden = true;
   document.title = `Layer ${DATA.layer} · Glimmer Scope`;
 }
@@ -145,7 +153,7 @@ function colorOf(p) {
 // region names, biggest region first, leaving out any that would overlap one already drawn
 function drawNames(items) {
   ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--bg"), ink = css("--ink");
+  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--map"), ink = css("--ink");
   for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
     const w = ctx.measureText(it.name).width + 10, box = [it.X - w / 2, it.Y - 9, it.X + w / 2, it.Y + 9];
     if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) continue;
@@ -160,7 +168,7 @@ function draw() {
   const dpr = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = css("--bg"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+  ctx.fillStyle = css("--map"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
   const r = Math.max(1.2, Math.min(4, view.s * 0.06)), dim = css("--dim"), ink = css("--ink");
   for (const p of P) {
     ctx.fillStyle = !matches || matches.has(p.id) ? colorOf(p) : dim;
