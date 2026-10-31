@@ -139,14 +139,16 @@ def smoke(layer: int = 24):
 
 
 @app.function(volumes=VOLUMES, gpu=GPU, timeout=24 * 3600)
-def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: int = 100_000_000, tag: str = ""):
+def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: int = 100_000_000, tag: str = "",
+          buffer_tokens: int = 1 << 20):
+    """``buffer_tokens`` is the GPU shuffle buffer; half of it fits a 96 GB card with room to spare."""
     from scope import model as glimmer
     from scope.config import SAEConfig, TrainConfig
     from scope.train import train as run_training
 
     model, tokenizer = glimmer.load()
     sae_cfg = SAEConfig(layer=layer, n_latents=n_latents, k=k)
-    cfg = TrainConfig(total_tokens=total_tokens)
+    cfg = TrainConfig(total_tokens=total_tokens, buffer_tokens=buffer_tokens)
     out = f"{OUTPUT_DIR}/{run_name(layer, n_latents, k)}{'-' + tag if tag else ''}"
     final = run_training(model, tokenizer, sae_cfg, cfg, out, commit=scope_volume.commit)
     print(f"saved {final}")
