@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Glimmer Scope</title>
+<style>
+  :root { --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1c1a; --muted: #6d6a64; --line: #e4e1db; --accent: #7a4cf5; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
+  }
+  :root[data-theme="dark"] { --bg: #111114; --panel: #1b1b1f; --ink: #ecebe8; --muted: #9a978f; --line: #2c2c31; --accent: #a587ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 16px 64px; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lede { color: var(--muted); font-size: 18px; margin: 0 0 28px; }
+  p { margin: 0 0 16px; }
+  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 40px 0 12px; font-weight: 600; }
+  .maps { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+  .maps a { display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; color: var(--ink); text-decoration: none; }
+  .maps a:hover, .maps a:focus-visible { border-color: var(--accent); }
+  .maps b { display: block; font-size: 16px; margin-bottom: 4px; }
+  .maps span { color: var(--muted); font-size: 14px; line-height: 1.45; display: block; }
+  .table { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .note { color: var(--muted); font-size: 14px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Glimmer Scope</h1>
+  <p class="lede">Looking inside Muse Glimmer 30B, Meta's open weight model.</p>
+
+  <p>I trained sparse autoencoders on three layers of Glimmer's residual stream, layers 12, 24 and 36, with 65,536 features each. Muse Spark 1.3 labeled every feature that fired on real text. Then I steering-tested thousands of them: push the feature's direction into the model while it writes, and check whether it starts talking about that thing and still makes sense.</p>
+  <p>The maps place each feature by the direction it writes into the model, so features that do similar things end up close together. The atlas lines the three layers up so the same subject sits in about the same spot on each one, and you can stack them to see how features carry through the depth of the model.</p>
+
+  <h2>Maps</h2>
+  <div class="maps">
+    <a href="atlas.html"><b>Atlas</b><span>Layers 12, 24 and 36 aligned. Slide between them or stack them, and click a feature to follow it up and down.</span></a>
+    <a href="layer-24.html"><b>Layer 24</b><span>Every concept feature in the middle of the model, colored by region or steering score.</span></a>
+    <a href="layer-36.html"><b>Layer 36</b><span>The same for the deepest layer so far.</span></a>
+  </div>
+
+  <h2>So far</h2>
+  <div class="table">
+    <table>
+      <thead><tr><th>Layer</th><th>Features labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
+      <tbody>
+        <tr><td>12</td><td>61,469</td><td>not yet</td><td></td><td></td></tr>
+        <tr><td>24</td><td>48,977</td><td>10,622</td><td>1,110</td><td>3,367</td></tr>
+        <tr><td>36</td><td>51,860</td><td>11,978</td><td>135</td><td>1,822</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:12px">Layer 36 is a lot harder to steer than layer 24: far fewer of its features shift the text without breaking it.</p>
+  <p class="note">Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these maps.</p>
+
+  <footer><a href="https://kroonen.ai">Kroonen AI</a> · updated October 31, 2026</footer>
+</main>
+</body>
+</html>
