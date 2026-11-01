@@ -209,12 +209,15 @@ meta_secret = modal.Secret.from_name(os.environ.get("GLIMMER_META_SECRET", "meta
 
 
 @app.function(volumes=VOLUMES, secrets=[meta_secret], cpu=2, timeout=8 * 3600)
-def label(run: str, limit: int = 20000, workers: int = 16, out_name: str = "labels.jsonl", everything: bool = False):
+def label(run: str, limit: int = 20000, workers: int = 16, out_name: str = "labels.jsonl", everything: bool = False,
+          skip_screened: bool = False):
     """Muse Spark names the catalog's features; resumes where it stopped.
 
     ``out_name`` writes to another file (merged into labels.jsonl later), so a second run
     never shares a file with one still going; features named in either file are skipped.
     ``everything`` drops the firing-rate filter: every feature that fired at all gets a try.
+    ``skip_screened`` leaves out features whose examples the judge's screen would stop, so nothing
+    sensitive goes to Spark (they are labeled locally, scripts/label_split.py).
     Features a request could not name are logged with the reason in label-failures.jsonl.
     """
     import json
@@ -227,6 +230,16 @@ def label(run: str, limit: int = 20000, workers: int = 16, out_name: str = "labe
     for path in {f"{base}/labels.jsonl", out}:
         if os.path.exists(path):
             done |= {json.loads(line)["latent"] for line in open(path)}
+    if skip_screened:
+        import gzip
+
+        from scope.label import describe
+        from scope.safety import screen
+
+        with gzip.open(f"{base}/catalog.jsonl.gz", "rt") as f:
+            screened = {row["latent"] for row in map(json.loads, f) if screen(describe(row))}
+        print(f"{len(screened - done)} screened features left for local labeling", flush=True)
+        done |= screened
     filters = {"min_freq": 0.0, "max_freq": 1.0, "min_examples": 1} if everything else None
     written = label_catalog(f"{base}/catalog.jsonl.gz", out, limit, workers=workers, done=done,
                             failures_path=f"{base}/label-failures.jsonl", filters=filters)
