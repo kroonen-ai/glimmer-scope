@@ -1,8 +1,8 @@
 """Grade a jobs file (from q4_check.py) with Muse Spark on this machine, like modal_app.py::judge_file.
 
-Runs where META_API_KEY is set (the AWS box reads it from SSM through aws/run.sh). A job whose
-feature label matches the safety patterns is never sent to Spark: it comes back with an error saying
-so, and q4_check.py --apply leaves that dial as it is.
+Runs where META_API_KEY is set (the AWS box reads it from SSM through aws/run.sh). Every request is
+screened first (scope.safety.screen), and the first content-filter rejection is recorded as a strike
+and stops all further sending; the dials not graded are left as they are by q4_check.py --apply.
 
     python scripts/judge_jobs.py JOBS.jsonl GRADED.jsonl [workers]
 """
@@ -13,16 +13,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scope.safety import flagged  # noqa: E402
-from scope.steerability import judge  # noqa: E402
+from scope.steerability import STRIKES, Filtered, Screened, judge  # noqa: E402
+
+
+STOP: list = []  # set at the first filter rejection; later jobs are not sent
 
 
 def one(job):
     feature = job["feature"]
     if flagged(feature.get("label", "")):
         return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "safety-flagged: not sent to Muse Spark"}
+    if STOP:
+        return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "not sent: stopped after a filter rejection"}
     try:
         steered = {float(s): answers for s, answers in job["steered"].items()}
         return judge(feature, job["contexts"], job["baseline"], steered)
+    except Screened as screened:
+        return {"latent": feature.get("latent"), "name": feature.get("name"), "error": json.loads(str(screened))["reason"]}
+    except Filtered:
+        # every rejection counts against the key: record the strike and send nothing more
+        STOP.append(feature.get("label", ""))
+        with open(STRIKES, "a") as strike_log:
+            strike_log.write(feature.get("label", "") + "\n")
+        return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "Meta's content filter rejected it; grading stopped"}
     except Exception as error:
         return {"latent": feature.get("latent"), "name": feature.get("name"), "error": str(error)[:400]}
 
