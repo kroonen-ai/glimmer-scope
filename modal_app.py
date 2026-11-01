@@ -617,9 +617,23 @@ def crosslayer(runs: str, n_tokens: int = 5_000_000, top: int = 8, checkpoint: s
     from scope.crosslayer import cofire
     from scope.sae import TopKSAE
 
+    import torch
+
     model, tokenizer = glimmer.load()
-    saes = [TopKSAE.load(f"{OUTPUT_DIR}/{run}/{checkpoint}", device="cuda") for run in runs.split(",")]
-    result = cofire(model, tokenizer, saes, n_tokens, top=top)
+    # One neighboring pair at a time: a pair's 64k x 64k sums are 17 GB, and beside Glimmer's ~60 GB
+    # a 96 GB card holds one pair, not three (2026-11-01). The pairs land in one file, as before.
+    names = runs.split(",")
+    result = {}
+    for lo, hi in zip(names, names[1:]):
+        saes = [TopKSAE.load(f"{OUTPUT_DIR}/{run}/{checkpoint}", device="cuda") for run in (lo, hi)]
+        pair = cofire(model, tokenizer, saes, n_tokens, top=top)
+        del saes
+        torch.cuda.empty_cache()
+        layers = sorted(set(result.get("layers", [])) | set(pair["layers"]))
+        tokens = min(result.get("tokens", pair["tokens"]), pair["tokens"])
+        result.update({key: value for key, value in pair.items() if key not in ("layers", "tokens")})
+        result["layers"], result["tokens"] = layers, tokens
+        print(f"pair {lo} / {hi}: done", flush=True)
     os.makedirs(f"{OUTPUT_DIR}/crosslayer", exist_ok=True)
     path = f"{OUTPUT_DIR}/crosslayer/{'-'.join(f'L{layer}' for layer in result['layers'])}.npz"
     np.savez_compressed(path, **result)
