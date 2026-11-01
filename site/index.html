@@ -44,6 +44,7 @@
   tr:last-child td { border-bottom: 0; }
   thead th { background: var(--surface); color: var(--muted); font-weight: 600; font-size: 13px; }
   td.clean { color: var(--accent); font-weight: 650; }
+  td.pending { color: var(--muted); font-style: italic; }
   .note { color: var(--muted); font-size: 15px; margin: 14px 0 0; max-width: 46em; }
   .footer-brand { display: flex; align-items: center; gap: 10px; }
   @media (max-width: 900px) {
@@ -61,29 +62,26 @@
     <div>
       <p class="eyebrow">Interpretability research</p>
       <h1>Looking inside <span>Muse Glimmer</span></h1>
-      <p class="lede">Sparse autoencoders on three layers of Meta's open weight 30B model: every feature labeled, thousands tested for steering, and the maps to explore them.</p>
+      <p class="lede"><!--LEDE--></p>
       <div class="ctas">
         <a class="btn btn-primary" href="atlas">Open the atlas</a>
         <a class="btn btn-ghost" href="examples">See steering in action</a>
       </div>
     </div>
-    <a class="shot" href="atlas" aria-label="Open the atlas"><img src="atlas-stack.jpg" width="960" height="860" alt="Three maps of Glimmer's features, one per layer, stacked in perspective: layer 12 at the bottom, 24 in the middle, 36 on top, each a cloud of colored dots grouped by subject."></a>
+    <a class="shot" href="atlas" aria-label="Open the atlas"><img src="atlas-stack.jpg" width="960" height="860" alt="Maps of Glimmer's features, one per layer, stacked in perspective, each a cloud of dots grouped by subject."></a>
   </div>
 </section>
 
 <div class="wrap">
   <div class="stats">
-    <div class="stat"><b>162,306</b><span>features labeled</span></div>
-    <div class="stat"><b>40,020</b><span>steering-tested</span></div>
-    <div class="stat"><b>1,937</b><span>steer cleanly</span></div>
-    <div class="stat"><b>3</b><span>layers mapped, 12, 24 and 36</span></div>
+<!--STATS-->
   </div>
 
   <section class="block">
     <h2>How it works</h2>
     <div class="steps">
-      <div class="step"><i>1</i><h3>Train</h3><p>A sparse autoencoder on each of layers 12, 24 and 36 of Glimmer's residual stream splits what the model computes into 65,536 features.</p></div>
-      <div class="step"><i>2</i><h3>Label</h3><p>Muse Spark 1.3 reads the text each feature fires on and labels every feature that fired at all.</p></div>
+      <div class="step"><i>1</i><h3>Train</h3><p><!--STEP_TRAIN--></p></div>
+      <div class="step"><i>2</i><h3>Label</h3><p>Muse Spark 1.3 reads the text each feature fires on and names it. A feature not labeled yet is still on its map, marked unlabeled.</p></div>
       <div class="step"><i>3</i><h3>Steer</h3><p>Push a feature's direction into the model while it writes, and Spark judges whether the answer moves to that subject and still makes sense.</p></div>
     </div>
   </section>
@@ -91,12 +89,10 @@
   <section class="block">
     <h2>Explore</h2>
     <div class="cards">
-      <a href="atlas"><span class="tag">Map</span><b>Atlas</b><span>Layers 12, 24 and 36 aligned. Slide between them or stack them, and click a feature to follow it up and down.</span><em>Open the atlas</em></a>
+      <a href="atlas"><span class="tag">Map</span><b>Atlas</b><span><!--ATLAS_CARD--></span><em>Open the atlas</em></a>
       <a href="examples"><span class="tag">Examples</span><b>What steering does</b><span>The same questions answered with one feature turned up: pirates, fairies, rain, Spanish and more.</span><em>See the examples</em></a>
       <a href="steerable"><span class="tag">List</span><b>Steerable features</b><span>Every feature that steers, with what it does to the answers. Search by subject or effect.</span><em>Browse the list</em></a>
-      <a href="layer-12"><span class="tag">Map</span><b>Layer 12</b><span>About a quarter of the way into the model.</span><em>Open layer 12</em></a>
-      <a href="layer-24"><span class="tag">Map</span><b>Layer 24</b><span>The middle of the model, where features steer best.</span><em>Open layer 24</em></a>
-      <a href="layer-36"><span class="tag">Map</span><b>Layer 36</b><span>The deepest layer so far, about two thirds of the way in.</span><em>Open layer 36</em></a>
+<!--LAYER_CARDS-->
     </div>
   </section>
 
@@ -104,21 +100,19 @@
     <h2>Per layer</h2>
     <div class="table">
       <table>
-        <thead><tr><th>Layer</th><th>Features labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
+        <thead><tr><th>Layer</th><th>Depth</th><th>Features that fired</th><th>Labeled</th><th>Steering-tested</th><th>Steer cleanly</th><th>Steer partly</th></tr></thead>
         <tbody>
-          <tr><td>12</td><td>61,469</td><td>17,420</td><td class="clean">692</td><td>2,683</td></tr>
-          <tr><td>24</td><td>48,977</td><td>10,622</td><td class="clean">1,110</td><td>3,367</td></tr>
-          <tr><td>36</td><td>51,860</td><td>11,978</td><td class="clean">135</td><td>1,822</td></tr>
+<!--TABLE_ROWS-->
         </tbody>
       </table>
     </div>
-    <p class="note">How well features steer depends on depth: about 4% steer cleanly at layer 12, 10% at layer 24 and 1% at layer 36, where far fewer shift the text without breaking it. <!--SAFETY_NOTE--></p>
+    <p class="note"><!--DEPTH_NOTE--> <!--SAFETY_NOTE--></p>
   </section>
 </div>
 
 <footer class="site-footer"><div class="inner">
   <span class="footer-brand"><a href="https://kroonen.ai">Kroonen AI</a></span>
-  <span>Updated October 31, 2026</span>
+  <span>Updated <!--UPDATED--></span>
 </div></footer>
 </body>
 </html>

@@ -26,7 +26,7 @@ its their his her your our is are be being been that this these those which who 
 words word text phrases phrase terms term token tokens use used using related references
 mentions mention content descriptions description general various specific common
 pattern patterns random clear generic fragments fragment contexts context variants forms concept concepts
-related etc style styles type types""".split())
+related etc style styles type types unlabeled""".split())
 
 
 def decoder(path: Path) -> np.ndarray:
@@ -52,7 +52,14 @@ def region_names(labels: list[str], assign: np.ndarray, k: int) -> list[str]:
         size = max(1, int((assign == c).sum()))
         scored = sorted(per_cluster[c].items(),
                         key=lambda kv: -(kv[1] / size) * np.log(total / (1 + doc_freq[kv[0]])))
-        names.append(" · ".join(w for w, _ in scored[:3]) or f"region {c}")
+        # two words that say different things (citation and citations count once)
+        picked = []
+        for w, _ in scored:
+            if not any(w[:5] == q[:5] for q in picked):
+                picked.append(w)
+            if len(picked) == 2:
+                break
+        names.append(" & ".join(picked) or "unlabeled features")
     return names
 
 

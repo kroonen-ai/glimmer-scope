@@ -11,6 +11,8 @@ Reads the built maps in results/ and the pages in site/; writes results/site/ fo
     python scripts/public_site.py [runs dir]
 """
 import os
+import datetime
+import gzip
 import json
 import re
 import shutil
@@ -34,11 +36,13 @@ MAPS = {layer: name for layer in range(1, 52)
         if (RESULTS / (name := "feature-map.json" if layer == 24 else f"feature-map-L{layer}.json")).exists()}
 NAMES = RESULTS / "region-names.json"
 EXAMPLES = RESULTS / "steering-examples.json"
-NAV = [["Overview", "./"], ["Atlas", "atlas"], *[[f"Layer {layer}", f"layer-{layer}"] for layer in MAPS],
+# the layer maps sit in one compact group, so nine layers fit the header
+NAV = [["Overview", "./"], ["Atlas", "atlas"], ["Layers", [[str(layer), f"layer-{layer}"] for layer in MAPS]],
        ["Examples", "examples"], ["Steerable", "steerable"]]
+DEPTH = 52  # Glimmer's decoder layers
 SITE = ROOT / "site"
 # Studio's private map pages link back to Studio; llama-server wants the .html
-STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], *[[f"Layer {layer}", f"layer-{layer}.html"] for layer in MAPS]]
+STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], ["Layers", [[str(layer), f"layer-{layer}.html"] for layer in MAPS]]]
 # near misses of the categories that a shared page should leave out too
 SAFETY_OPTION = re.compile(r'\s*<option value="safety">[^<]*</option>')
 
@@ -110,6 +114,8 @@ def public_data(full: bool = False) -> tuple[dict, dict, dict]:
         data = json.loads((RESULTS / name).read_text())
         assert data.setdefault("layer", layer) == layer  # layer 24's map predates the field
         maps[layer], counts[layer] = (data, 0) if full else public_map(data)
+        if full:  # names from the labels as they are now (labels keep arriving after a map is built)
+            rename(data["regions"], data["points"], "region", "label")
     return atlas, maps, counts
 
 
@@ -151,6 +157,71 @@ def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
     return rows
 
 
+def layer_stats(runs: Path) -> dict:
+    """Per layer with an SAE: features that fired, labeled, steering-tested, and how many steer."""
+    stats = {}
+    for layer in range(1, DEPTH):
+        run = runs / f"layer{layer}-64k-k64"
+        if not (run / "final" / "cfg.json").exists():
+            continue
+        fired = sum(1 for _ in gzip.open(run / "catalog.jsonl.gz", "rt")) if (run / "catalog.jsonl.gz").exists() else 0
+        labeled = len({json.loads(line)["latent"] for line in open(run / "labels.jsonl")}) if (run / "labels.jsonl").exists() else 0
+        best = {}
+        for name in ("steerability.jsonl", "steerability-personas.jsonl"):
+            if (run / name).exists():
+                for r in map(json.loads, open(run / name)):
+                    best[r["latent"]] = max(best.get(r["latent"], 0.0), r["score"])
+        stats[layer] = {"fired": fired, "labeled": min(labeled, fired) if fired else labeled, "tested": len(best),
+                        "clean": sum(v >= 0.99 for v in best.values()), "partly": sum(0.66 <= v < 0.99 for v in best.values())}
+    return stats
+
+
+def and_list(items) -> str:
+    items = [str(i) for i in items]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def overview(template: str, stats: dict, atlas: dict) -> str:
+    layers = sorted(stats)
+    total = {k: sum(v[k] for v in stats.values()) for k in ("fired", "labeled", "tested", "clean")}
+    span = f"{layers[0]} to {layers[-1]}"
+    stat = lambda big, small: f'    <div class="stat"><b>{big}</b><span>{small}</span></div>'  # noqa: E731
+    cards, rows = [], []
+    for layer in layers:
+        st, pct = stats[layer], round(layer / DEPTH * 100)
+        tested = f"{st['tested']:,} steering-tested" if st["tested"] else "steering test in progress"
+        if layer in MAPS:
+            cards.append(f'      <a href="layer-{layer}"><span class="tag">Map</span><b>Layer {layer}</b>'
+                         f'<span>{pct}% of the way in. {st["fired"]:,} features, {tested}.</span><em>Open layer {layer}</em></a>')
+        pending = '<td class="pending">in progress</td>'
+        rows.append(f"          <tr><td>{layer}</td><td>{pct}%</td><td>{st['fired']:,}</td>"
+                    + (f"<td>{st['labeled']:,}</td>" if st["labeled"] >= st["fired"] else f'<td class="pending">{st["labeled"]:,}</td>')
+                    + (f"<td>{st['tested']:,}</td><td class=\"clean\">{st['clean']:,}</td><td>{st['partly']:,}</td>" if st["tested"] else pending * 3)
+                    + "</tr>")
+    rates = [f"{st['clean'] / st['tested']:.0%} at layer {layer}" for layer, st in sorted(stats.items()) if st["tested"] >= 2000]
+    atlas_layers = [m["layer"] for m in atlas["maps"]]
+    fill = {
+        "LEDE": f"Sparse autoencoders on {len(layers)} layers of Meta's open weight 30B model, every third from {span}: "
+                "each feature that fired, what it responds to, and whether turning it up steers the model.",
+        "STATS": "\n".join([stat(len(layers), f"layers, {span}"), stat(f"{total['fired']:,}", "features that fired"),
+                            stat(f"{total['labeled']:,}", "labeled so far"),
+                            stat(f"{total['tested']:,}", f"steering-tested, {total['clean']:,} steer cleanly")]),
+        "STEP_TRAIN": f"A sparse autoencoder on each of {len(layers)} layers of Glimmer's residual stream, every third from "
+                      f"{span}, splits what the model computes into 65,536 features.",
+        "ATLAS_CARD": f"Layers {and_list(atlas_layers)} aligned. Slide between them or stack them, and click a feature to follow it up and down.",
+        "LAYER_CARDS": "\n".join(cards),
+        "TABLE_ROWS": "\n".join(rows),
+        "DEPTH_NOTE": ("How well features steer depends on depth. Of the features tested so far, " + and_list(rates)
+                       + " steer cleanly. The tests start with the features most likely to steer; layers marked in progress are being labeled and tested now.")
+                      if rates else "",
+        "UPDATED": datetime.date.today().strftime("%B %-d, %Y"),
+    }
+    for key, value in fill.items():
+        template = template.replace(f"<!--{key}-->", value)
+    assert "<!--" not in re.sub(r"<!--(THEME|HEADER|BARHEAD|SAFETY_NOTE)-->", "", template), "an overview placeholder is left"
+    return template
+
+
 def strings(value):
     if isinstance(value, str):
         yield value
@@ -171,8 +242,14 @@ def brand(product: str = "Glimmer Scope") -> str:
 
 def nav(current: str, links=NAV, label="Glimmer Scope") -> str:
     mark = ' aria-current="page"'
-    items = "".join(f'<a href="{href}"{mark if href == current else ""}>{text}</a>' for text, href in links)
-    return f'<nav class="site-nav" id="site-nav" aria-label="{label}">{items}</nav>'
+    items = []
+    for text, href in links:
+        if isinstance(href, list):  # a group: the layer maps, by number
+            inner = "".join(f'<a href="{h}" aria-label="Layer {t}"{mark if h == current else ""}>{t}</a>' for t, h in href)
+            items.append(f'<span class="nav-group"><span class="nav-label">{text}</span>{inner}</span>')
+        else:
+            items.append(f'<a href="{href}"{mark if href == current else ""}>{text}</a>')
+    return f'<nav class="site-nav" id="site-nav" aria-label="{label}">{"".join(items)}</nav>'
 
 
 def page(template: str, current: str, data=None, src: str | None = None, private: bool = False, full: bool = False) -> str:
@@ -235,7 +312,8 @@ def main():
             assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
     note = ("This site is private: every feature is here, safety-relevant ones included, and the maps can color them."
             if full else "Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.")
-    (out / "index.html").write_text(page((SITE / "index.html").read_text().replace("<!--SAFETY_NOTE-->", note), "./"))
+    index = overview((SITE / "index.html").read_text(), layer_stats(runs), atlas)
+    (out / "index.html").write_text(page(index.replace("<!--SAFETY_NOTE-->", note), "./"))
     for name in ("theme.css", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
         (out / name).parent.mkdir(exist_ok=True)
         shutil.copy(SITE / name, out / name)

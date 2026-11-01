@@ -82,8 +82,8 @@
   <input type="search" id="q" placeholder="Search labels or feature ids" aria-label="Search features" autocomplete="off">
   <button type="button" class="more-toggle" id="more" aria-expanded="false">Options</button>
   <select id="color" class="more" aria-label="Color by">
+    <option value="kind" selected>Color: kind</option>
     <option value="region">Color: region</option>
-    <option value="kind">Color: kind</option>
     <option value="score">Color: steering</option>
     <option value="safety">Color: safety-relevant</option>
   </select>
@@ -112,8 +112,11 @@ const qEl = document.getElementById("q"), results = document.getElementById("res
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
-const regionColor = R.map((r) => `hsl(${hue(r.id)}, 62%, 52%)`);
-const KINDS = { concept: "#0064e0", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f", unlabeled: "#c4c1b8" };
+const regionColor = R.map((r) => `hsl(${hue(r.id)}, 46%, 58%)`);
+const KINDS = { concept: "#0064e0", syntax: "#8b5cf6", token: "#14a38b", format: "#f29a38", unclear: "#9aa6b4", unlabeled: "#cfd5dd" };
+// gray first, so the colored kinds sit on top
+const ORDER = { unlabeled: 0, unclear: 1 };
+P.sort((a, b) => (ORDER[a.kind] ?? 2) - (ORDER[b.kind] ?? 2));
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
 const scoreColor = (s) => (s >= 0.99 ? css("--accent") : s >= 0.66 ? "#f5a524" : s > 0 ? "#8fa3b5" : "#7b6ba8");
@@ -150,17 +153,22 @@ function colorOf(p) {
   return regionColor[p.region];
 }
 
-// region names, biggest region first, leaving out any that would overlap one already drawn
+// region names on small labels, biggest region first: a few when zoomed out, more as you zoom in,
+// never overlapping one already drawn and never cut by the edge
 function drawNames(items) {
-  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--map"), ink = css("--ink");
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
+  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, t = top(), ink = css("--ink");
+  const room = Math.round(18 * Math.min(6, view.s / fitScale) * Math.min(1, W / 900));
+  const bg = css("--panel") || "#fff";
   for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
-    const w = ctx.measureText(it.name).width + 10, box = [it.X - w / 2, it.Y - 9, it.X + w / 2, it.Y + 9];
-    if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) continue;
-    if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+    if (placed.length >= room) break;
+    const w = ctx.measureText(it.name).width + 14, box = [it.X - w / 2, it.Y - 11, it.X + w / 2, it.Y + 11];
+    if (box[0] < 4 || box[2] > W - 4 || box[1] < t || box[3] > H - 40) continue;
+    if (placed.some((b) => box[0] < b[2] + 4 && box[2] > b[0] - 4 && box[1] < b[3] + 4 && box[3] > b[1] - 4)) continue;
     placed.push(box);
-    ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(it.name, it.X, it.Y);
-    ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y);
+    ctx.globalAlpha = 0.92; ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.roundRect(box[0], box[1], w, 22, 11); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y + 0.5);
   }
 }
 
@@ -169,11 +177,14 @@ function draw() {
   canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--map"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-  const r = Math.max(1.2, Math.min(4, view.s * 0.06)), dim = css("--dim"), ink = css("--ink");
+  // points shrink with how many there are, so 60,000 features stay a map and not a smear
+  const r = Math.max(1, Math.min(3.5, view.s * 0.045)), dim = css("--dim"), ink = css("--ink");
+  ctx.globalAlpha = matches ? 1 : 0.85;
   for (const p of P) {
     ctx.fillStyle = !matches || matches.has(p.id) ? colorOf(p) : dim;
     ctx.fillRect(sx(p.x) - r / 2, sy(p.y) - r / 2, r, r);
   }
+  ctx.globalAlpha = 1;
   if (matches) {
     ctx.strokeStyle = ink; ctx.lineWidth = 1;
     for (const p of P) if (matches.has(p.id)) { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), r + 2.5, 0, 6.283); ctx.stroke(); }
@@ -191,7 +202,9 @@ function legend() {
     el.innerHTML = [[1, "steers cleanly"], [0.667, "partly"], [0.333, "weak"], [0, "doesn't steer"]]
       .map(([s, t]) => `<i style="background:${scoreColor(s)}"></i>${t}`).join("") + `<i style="background:${css("--muted")};opacity:.3"></i>not tested`;
   } else if (mode === "kind") {
-    el.innerHTML = Object.entries(KINDS).map(([k, c]) => `<i style="background:${c}"></i>${k}`).join("");
+    const count = {}; for (const p of P) count[p.kind] = (count[p.kind] || 0) + 1;
+    el.innerHTML = Object.entries(KINDS).filter(([k]) => count[k])
+      .map(([k, c]) => `<i style="background:${c}"></i>${k} ${count[k].toLocaleString()}`).join("");
   } else {
     el.textContent = matchMedia("(pointer: coarse)").matches ? "Tap a dot to see its region. Pinch to zoom." : "Click a dot to see its region. Scroll to zoom, drag to move.";
   }

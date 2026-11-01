@@ -55,6 +55,9 @@ body { -webkit-font-smoothing: antialiased; }
 .site-nav a { color: var(--ink); text-decoration: none; font-size: 14px; font-weight: 500; padding: 6px 12px; border-radius: 999px; white-space: nowrap; }
 .site-nav a:hover { background: var(--surface); }
 .site-nav a[aria-current] { background: var(--accent-tint); color: var(--accent-ink); font-weight: 600; }
+.nav-group { display: flex; align-items: center; gap: 1px; margin: 0 4px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
+.nav-group .nav-label { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 6px 0 8px; }
+.site-nav .nav-group a { padding: 4px 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
 
 /* document pages: header, sections, buttons, cards, footer */
 .site-header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(12px);
