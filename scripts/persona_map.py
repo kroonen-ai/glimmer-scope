@@ -1,10 +1,11 @@
 """Map Glimmer's personas: how similar the archetype directions are, and what they share.
 
-    python scripts/persona_map.py ARCHETYPES_DIR MAP_FEATURES.safetensors OUT_DIR
+    python scripts/persona_map.py ARCHETYPES_DIR MAP_FEATURES.safetensors OUT_DIR [LABELS.jsonl]
 
 ARCHETYPES_DIR holds <slug>/directions-final.safetensors and <slug>/ranking-final.json
 from modal_app.py::archetype; MAP_FEATURES holds SAE decoder rows from ::directions.
-Writes persona-map.png (similarity heatmap and a 2D layout) and persona-map.json.
+Writes persona-map.png (similarity heatmap and a 2D layout) and persona-map.json. FEATURES names
+layer 24's features; for another layer pass its labels.jsonl so the features get their own names.
 """
 
 import json
@@ -59,6 +60,9 @@ def main() -> None:
     V = np.stack(vectors)
     sim = V @ V.T
     feats = {k: unit(v.astype(np.float64)) for k, v in load_file(features_path).items()}
+    names_of = FEATURES
+    if len(sys.argv) > 4:
+        names_of = {str(r["latent"]): r["label"] for r in map(json.loads, open(sys.argv[4]))}
 
     # order by average-linkage clustering on cosine distance
     from scipy.cluster.hierarchy import leaves_list, linkage
@@ -102,12 +106,12 @@ def main() -> None:
             "cos_with_each": {names[i]: round(float(share[i]), 3) for i in np.argsort(-share)},
             "companions_first_component_variance": round(pc_var, 3) if pc_var is not None else None,
             "closest_features": sorted(
-                ({"feature": k, "label": FEATURES.get(k, ""), "cos": round(float(shared @ f), 3)} for k, f in feats.items()),
+                ({"feature": k, "label": names_of.get(k, ""), "cos": round(float(shared @ f), 3)} for k, f in feats.items()),
                 key=lambda r: -abs(r["cos"]),
             )[:8],
         },
         "features_vs_archetypes": {
-            f"{k} {FEATURES.get(k, '')}": dict(
+            f"{k} {names_of.get(k, '')}": dict(
                 sorted(((names[i], round(float(V[i] @ f), 3)) for i in range(n)), key=lambda kv: -abs(kv[1]))[:5]
             )
             for k, f in feats.items()
