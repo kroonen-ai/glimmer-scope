@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from public_site import NAMES, public_data  # noqa: E402
 from scope.llm import json_from  # noqa: E402
+from scope.safety import screen  # noqa: E402
 
 PER_PROMPT = 10
 SAMPLE = 30
@@ -58,6 +59,8 @@ def jobs(path: Path):
             batch = todo[start:start + PER_PROMPT]
             blocks = []
             for n, (key, labels) in enumerate(batch, 1):
+                # labels the judge screen would stop stay out of the sample, so the prompt can be sent
+                labels = [label for label in labels if not screen(label)] or labels
                 sample = rng.sample(labels, min(SAMPLE, len(labels)))
                 blocks.append(f"Region {n} ({len(labels)} features): " + "; ".join(sample))
             f.write(json.dumps({"id": [key for key, _ in batch], "prompt": PROMPT.format(regions="\n\n".join(blocks))}) + "\n")
