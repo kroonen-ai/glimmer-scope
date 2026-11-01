@@ -158,6 +158,9 @@ def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict
 
     if not feature.get("label"):
         raise keep(Unjudged, "unlabeled: judged once it has a label")
+    if os.environ.get("NO_JUDGE"):
+        # the AWS box only generates: Spark judges these from the Mac
+        raise keep(Unjudged, "judged off the box")
     if off := judging_off():
         raise keep(Unjudged, off)
     prompt = judge_prompt(feature, contexts, baseline, steered)

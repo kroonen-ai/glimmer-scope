@@ -8,8 +8,10 @@ its members' labels share most. Writes results/feature-map-L<layer>.html (intera
 
     python scripts/feature_map.py runs/layer24-64k-k64 [regions] [kinds]
 
-kinds defaults to "concept" (a map of subjects); "all" maps format, syntax and token features too.
+kinds defaults to "concept" (a map of subjects); "all" maps format, syntax and token features too;
+"fired" maps every feature in the catalog, labeled or not.
 """
+import gzip
 import json
 import re
 import struct
@@ -59,7 +61,13 @@ def main():
     k = int(sys.argv[2]) if len(sys.argv) > 2 else 100
     kinds = sys.argv[3] if len(sys.argv) > 3 else "concept"
     labels = [json.loads(line) for line in open(base / "labels.jsonl")]
-    if kinds != "all":
+    if kinds == "fired":
+        # every feature that fired, labeled or not: the unlabeled show as "unlabeled"
+        known = {r["latent"]: r for r in labels}
+        with gzip.open(base / "catalog.jsonl.gz", "rt") as f:
+            labels = [known.get(lat) or {"latent": lat, "label": "unlabeled", "kind": "unlabeled"}
+                      for lat in (json.loads(line)["latent"] for line in f)]
+    elif kinds != "all":
         labels = [r for r in labels if r.get("kind") in set(kinds.split(","))]
     labels.sort(key=lambda r: r["latent"])
     scores = {}

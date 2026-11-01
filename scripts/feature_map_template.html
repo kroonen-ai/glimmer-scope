@@ -113,7 +113,7 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
 const regionColor = R.map((r) => `hsl(${hue(r.id)}, 62%, 52%)`);
-const KINDS = { concept: "#0064e0", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f" };
+const KINDS = { concept: "#0064e0", unclear: "#9a978f", format: "#e08a2e", syntax: "#2e9de0", token: "#3fbf7f", unlabeled: "#c4c1b8" };
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
 const scoreColor = (s) => (s >= 0.99 ? css("--accent") : s >= 0.66 ? "#f5a524" : s > 0 ? "#8fa3b5" : "#7b6ba8");
