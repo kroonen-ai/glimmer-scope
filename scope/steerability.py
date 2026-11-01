@@ -11,6 +11,8 @@ judge also says what the steering actually did, which may not match the label.
 """
 
 import json
+import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 
@@ -108,41 +110,68 @@ class Screened(Exception):
     """A judge prompt that touches sensitive subjects: never sent to Muse Spark (see scope.safety.screen)."""
 
 
+class Unjudged(Screened):
+    """Steered replies that cannot be judged now (no label yet, Spark failing, judging off): kept whole
+    in *-unjudged.jsonl, so they are judged later without generating anything again."""
+
+
 class Filtered(Exception):
     """Meta's content filter rejected a judge request; each one counts against the API key."""
 
 
-FILTER_LIMIT = 1  # a sweep stops itself, and every queue, at the first filter rejection
-STRIKE_BUDGET = 6  # rejections the current key may take across all runs before judging refuses to start
+STRIKE_BUDGET = 6  # rejections the current key may take across all runs before judging stops for good
 STRIKES = "/scope/filter-strikes.log"
+# Written at a filter rejection. From then on nothing more is sent to Spark for judging, but the GPU
+# keeps steering and every reply is kept for later.
+JUDGING_OFF = "/scope/judging-off"
 _filtered = 0
 
 
 def strikes() -> int:
-    import os
-
     return sum(1 for _ in open(STRIKES)) if os.path.exists(STRIKES) else 0
 
 
-def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
+def judging_off() -> str | None:
+    if os.path.exists(JUDGING_OFF):
+        return "judging is off after a filter rejection"
     if strikes() >= STRIKE_BUDGET:
-        raise RuntimeError(f"Meta's filter has rejected {strikes()} requests on this key; judging is off until Robin decides")
+        return f"Meta's filter has rejected {strikes()} requests on this key"
+    return None
+
+
+def stop_judging(label: str) -> None:
+    with open(STRIKES, "a") as strike_log:
+        strike_log.write(label + "\n")
+    with open(JUDGING_OFF, "a") as flag:
+        flag.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {label}\n")
+
+
+def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
+    """Spark's verdict on one feature's steering. Whatever stops the verdict, the replies are kept:
+    Screened (not sent), Unjudged (could not be judged now) and Filtered all carry them whole."""
+    kept = {"latent": feature.get("latent"), "name": feature.get("name"), "label": feature.get("label", ""),
+            "kind": feature.get("kind"), "contexts": contexts, "baseline": baseline,
+            "steered": {str(s): answers for s, answers in steered.items()}}
+
+    def keep(kind, reason, **extra):
+        return kind(json.dumps({**kept, "reason": reason, **extra}))
+
+    if not feature.get("label"):
+        raise keep(Unjudged, "unlabeled: judged once it has a label")
+    if off := judging_off():
+        raise keep(Unjudged, off)
     prompt = judge_prompt(feature, contexts, baseline, steered)
     if term := screen(prompt):
-        # not sent to Meta now, but kept whole: label, contexts, baseline and every steered reply,
-        # so it can be judged later without generating anything again
-        raise Screened(json.dumps({"latent": feature.get("latent"), "name": feature.get("name"), "label": feature.get("label", ""),
-                                   "reason": f"screened: the judge request mentions {term!r}, not sent to Muse Spark yet",
-                                   "contexts": contexts, "baseline": baseline,
-                                   "steered": {str(s): answers for s, answers in steered.items()}}))
+        raise keep(Screened, f"screened: the judge request mentions {term!r}, not sent to Muse Spark yet")
     try:
         verdict = json_from(chat(prompt))
+        value, strength = score(verdict)
     except RuntimeError as error:
         if "content_policy" in str(error):
-            raise Filtered(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
-                                       "reason": "Meta's content filter rejected the judge request", "prompt": prompt}))
-        raise
-    value, strength = score(verdict)
+            raise keep(Filtered, "Meta's content filter rejected the judge request", prompt=prompt)
+        raise keep(Unjudged, f"not judged: {str(error)[:300]}")
+    except Exception as error:
+        raise keep(Unjudged, f"not judged: {str(error)[:300]}")
     return {
         "latent": feature.get("latent"),
         "name": feature.get("name"),
@@ -222,30 +251,19 @@ def _write(out, future) -> int:
     try:
         result = future.result()
     except Screened as screened:
-        with open(out.name.replace(".jsonl", "-screened.jsonl"), "a") as kept_out:
+        suffix = "-unjudged.jsonl" if isinstance(screened, Unjudged) else "-screened.jsonl"
+        with open(out.name.replace(".jsonl", suffix), "a") as kept_out:
             kept_out.write(str(screened) + "\n")
         return 0
     except Filtered as filtered:
-        # Kept on this machine to tighten the screen; never sent anywhere.
+        # every reply stays on this machine; the rejection turns judging off, the steering goes on
         global _filtered
         _filtered += 1
         with open(out.name.replace(".jsonl", "-filtered.jsonl"), "a") as kept_out:
             kept_out.write(str(filtered) + "\n")
-        with open(STRIKES, "a") as strike_log:
-            strike_log.write(json.loads(str(filtered))["label"] + "\n")
-        print(f"judge failed: Meta's content filter rejected a request ({_filtered} this run)", flush=True)
-        if _filtered >= FILTER_LIMIT:
-            import os
-            import subprocess
-
-            print(f"STOPPING: {_filtered} filter rejections; stopping before the Meta key gets blocked", flush=True)
-            out.flush()
-            # whichever queue is running (queue2 handed over to queue3): stop it so nothing else is sent
-            sessions = subprocess.run(["tmux", "ls", "-F", "#S"], capture_output=True, text=True).stdout.split()
-            for session in sessions:
-                if session.startswith("queue"):
-                    subprocess.run(["tmux", "kill-session", "-t", f"={session}"], check=False)
-            os._exit(3)
+        stop_judging(json.loads(str(filtered))["label"])
+        print(f"JUDGING OFF: Meta's content filter rejected a request ({_filtered} this run); "
+              "steering goes on and every reply is kept", flush=True)
         return 0
     except Exception as error:
         print(f"judge failed: {error}", flush=True)

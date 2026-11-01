@@ -27,7 +27,7 @@ from .llm import chat, json_from
 from .model import residual
 from .personas import ARCHETYPES, EVAL_SETS, PROMPT_SETS, SAME_CONTENT, slug  # noqa: F401
 from .safety import screen
-from .steerability import ANSWER_CHANNEL, STRIKE_BUDGET, Filtered, Screened, answer_prefix, generate, strikes
+from .steerability import ANSWER_CHANNEL, Filtered, Screened, answer_prefix, generate, judging_off
 
 PAIRS_PROMPT = """Write paired replies that contrast two voices, for research on how a language model represents personas.
 
@@ -229,8 +229,8 @@ def target_judge(name: str, spec: dict, entry: dict) -> dict:
     for strength, answers in sorted(entry["samples"].items(), key=lambda kv: float(kv[0])):
         lines = "\n".join(f"  [{i + 1}] {' '.join(a.split())[:350]}" for i, a in enumerate(answers))
         blocks.append(f"Strength {strength}:\n{lines}")
-    if strikes() >= STRIKE_BUDGET:
-        raise RuntimeError(f"Meta's filter has rejected {strikes()} requests on this key; judging is off until Robin decides")
+    if off := judging_off():
+        raise Screened(f"not sent: {off}")
     prompt = TARGET_JUDGE.format(name=name, description=spec["description"], steered="\n\n".join(blocks))
     # same screen as the sweep's judge; the steered replies stay on disk in steerability-*.jsonl either way
     if term := screen(prompt):

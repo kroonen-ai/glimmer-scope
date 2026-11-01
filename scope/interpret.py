@@ -43,7 +43,11 @@ def build_catalog(
     chat_fraction: float = 0.3,
     seed: int = 1,
     split: str = "catalog",
+    traces_dir: str | None = None,
 ) -> dict:
+    """``traces_dir`` also keeps every firing, not just each feature's top examples: row p of
+    latents.u16 and acts.f16 holds the k features the SAE picked at token p of tokens.npy and their
+    activations (all zero where keep_mask drops the position: padding, row starts, BOS, sinks)."""
     n = sae.cfg.n_latents
     best_vals = np.full((n, top_n), -np.inf, dtype=np.float32)
     best_ptr = np.full((n, top_n), -1, dtype=np.int64)
@@ -53,6 +57,12 @@ def build_catalog(
     seen = 0
     kept_total = 0
     sink_ids = tuple(i for i in (tokenizer.bos_token_id,) if i is not None)
+    trace_latents = trace_acts = None
+    if traces_dir:
+        assert n <= 65536, "latent ids are stored as uint16"
+        Path(traces_dir).mkdir(parents=True, exist_ok=True)
+        trace_latents = open(Path(traces_dir) / "latents.u16", "wb")
+        trace_acts = open(Path(traces_dir) / "acts.f16", "wb")
 
     for ids, mask in token_batches(tokenizer, seq_len, batch, chat_fraction, seed, split):
         ids_d, mask_d = ids.cuda(), mask.cuda()
@@ -67,6 +77,9 @@ def build_catalog(
         vals = torch.cat(vals_parts)
         idx = torch.cat(idx_parts)
         vals[~keep] = 0
+        if trace_latents:
+            trace_latents.write(idx.cpu().numpy().astype(np.uint16).tobytes())
+            trace_acts.write(vals.float().cpu().numpy().astype(np.float16).tobytes())
         positions = seen + torch.arange(x.shape[0], device=x.device)
         flat_vals = vals.reshape(-1)
         live = flat_vals > 0
@@ -83,6 +96,16 @@ def build_catalog(
             break
 
     tokens = np.concatenate(token_rows)
+    if trace_latents:
+        trace_latents.close()
+        trace_acts.close()
+        np.save(Path(traces_dir) / "tokens.npy", tokens.astype(np.int32))
+        (Path(traces_dir) / "meta.json").write_text(json.dumps({
+            "positions": int(seen), "k": int(sae.cfg.k), "seq_len": seq_len, "n_latents": int(n), "layer": int(sae.cfg.layer),
+            "kept_positions": int(kept_total), "seed": seed, "split": split, "chat_fraction": chat_fraction,
+            "files": {"latents.u16": f"uint16 [{seen}, {sae.cfg.k}]", "acts.f16": f"float16 [{seen}, {sae.cfg.k}]",
+                      "tokens.npy": f"int32 [{seen}]"},
+        }, indent=1))
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     alive = 0

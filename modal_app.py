@@ -155,14 +155,20 @@ def train(layer: int = 24, n_latents: int = 65536, k: int = 64, total_tokens: in
 
 
 @app.function(volumes=VOLUMES, gpu=GPU, timeout=6 * 3600)
-def catalog(run: str, n_tokens: int = 5_000_000, checkpoint: str = "final"):
+def catalog(run: str, n_tokens: int = 5_000_000, checkpoint: str = "final", traces: bool = False):
+    """``traces`` also keeps every firing in {run}/traces/ (scope.interpret.build_catalog). The same
+    seed gives the same tokens, so a rerun writes its catalog beside an existing one, never over it."""
     from scope import model as glimmer
     from scope.interpret import build_catalog
     from scope.sae import TopKSAE
 
+    base = f"{OUTPUT_DIR}/{run}"
+    out = f"{base}/catalog.jsonl.gz"
+    if traces and os.path.exists(out):
+        out = f"{base}/catalog-traces.jsonl.gz"
     model, tokenizer = glimmer.load()
-    sae = TopKSAE.load(f"{OUTPUT_DIR}/{run}/{checkpoint}", device="cuda")
-    stats = build_catalog(model, tokenizer, sae, n_tokens, f"{OUTPUT_DIR}/{run}/catalog.jsonl.gz")
+    sae = TopKSAE.load(f"{base}/{checkpoint}", device="cuda")
+    stats = build_catalog(model, tokenizer, sae, n_tokens, out, traces_dir=f"{base}/traces" if traces else None)
     scope_volume.commit()
     print(stats)
 
@@ -246,6 +252,7 @@ def sweep(
     Generation is memory-bound, so 128 rows a batch costs little more per step than 32 and
     roughly doubles features per GPU hour; greedy decoding keeps the texts the same.
 
+    ``candidates="catalog"`` sweeps every feature that fired, whatever its kind and labeled or not.
     ``candidates="personas"`` sweeps the features ``persona_scan`` flagged instead, judged on
     ``prompt_set`` prompts from scope.archetype.EVAL_SETS (``social`` suits them) into
     steerability-personas.jsonl.
@@ -260,11 +267,33 @@ def sweep(
     from scope.steerability import contexts_for, sweep as run_sweep
 
     base = f"{OUTPUT_DIR}/{run}"
-    out = f"{base}/steerability.jsonl" if candidates == "labels" else f"{base}/steerability-{candidates}.jsonl"
+    # the catalog mode writes where the labels mode does: one file of scores per layer
+    out = f"{base}/steerability.jsonl" if candidates in ("labels", "catalog") else f"{base}/steerability-{candidates}.jsonl"
     scored = set()
     if os.path.exists(out):
         scored = {json.loads(line)["latent"] for line in open(out)}
-    if candidates == "labels":
+    # features whose replies are already kept without a score are never steered again
+    for suffix in ("-screened.jsonl", "-unjudged.jsonl", "-filtered.jsonl"):
+        kept = out.replace(".jsonl", suffix)
+        if os.path.exists(kept):
+            for line in open(kept):
+                row = json.loads(line)
+                if "steered" in row:
+                    scored.add(row["latent"])
+    if candidates == "catalog":
+        # every feature that fired, labeled or not; one without a label keeps its replies for later
+        labels = {}
+        if os.path.exists(f"{base}/labels.jsonl"):
+            labels = {r["latent"]: r for r in map(json.loads, open(f"{base}/labels.jsonl"))}
+        features = []
+        with gzip.open(f"{base}/catalog.jsonl.gz", "rt") as f:
+            for line in f:
+                latent = json.loads(line)["latent"]
+                if latent not in scored:
+                    r = labels.get(latent, {})
+                    features.append({"latent": latent, "label": r.get("label", ""), "kind": r.get("kind", "unlabeled"),
+                                     "steer": r.get("steer", -1)})
+    elif candidates == "labels":
         wanted = set(kinds.split(","))
         labels = [json.loads(line) for line in open(f"{base}/labels.jsonl")]
         features = [
@@ -629,7 +658,7 @@ def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
     from pathlib import Path
 
     from scope.archetype import ARCHETYPES, slug, target_judge
-    from scope.steerability import STRIKES, Filtered, Screened
+    from scope.steerability import Filtered, Screened, stop_judging
 
     base = Path(f"{OUTPUT_DIR}/{run}/archetypes")
     stop = []  # set at the first filter rejection: it is recorded as a strike and nothing more is sent
@@ -650,9 +679,8 @@ def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
             return name, {"candidate": candidate, "error": str(screened)}
         except Filtered as filtered:
             stop.append(str(filtered))
-            with open(STRIKES, "a") as strike_log:
-                strike_log.write(str(filtered) + "\n")
-            print(f"STOPPING: Meta's content filter rejected {filtered}; nothing more is sent", flush=True)
+            stop_judging(str(filtered))
+            print(f"JUDGING OFF: Meta's content filter rejected {filtered}; nothing more is sent", flush=True)
             return name, {"candidate": candidate, "error": "Meta's content filter rejected it; retarget stopped"}
         except Exception as error:
             return name, {"candidate": entry.get("name") or entry.get("latent"), "error": str(error)}

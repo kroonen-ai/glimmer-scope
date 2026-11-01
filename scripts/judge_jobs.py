@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scope.steerability import STRIKES, Filtered, Screened, judge  # noqa: E402
+from scope.steerability import Filtered, Screened, judge, stop_judging  # noqa: E402
 
 
 STOP: list = []  # set at the first filter rejection; later jobs are not sent
@@ -30,8 +30,7 @@ def one(job):
     except Filtered:
         # every rejection counts against the key: record the strike and send nothing more
         STOP.append(feature.get("label", ""))
-        with open(STRIKES, "a") as strike_log:
-            strike_log.write(feature.get("label", "") + "\n")
+        stop_judging(feature.get("label", ""))
         return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "Meta's content filter rejected it; grading stopped"}
     except Exception as error:
         return {"latent": feature.get("latent"), "name": feature.get("name"), "error": str(error)[:400]}
