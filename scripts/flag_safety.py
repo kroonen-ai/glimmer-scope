@@ -12,7 +12,9 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-CATEGORIES = {}  # keyword lists kept private, see scope/safety.py
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scope.safety import CATEGORIES  # noqa: E402  (the patterns live with the pipeline)
 
 
 def main():

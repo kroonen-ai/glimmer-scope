@@ -20,8 +20,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from feature_map import region_names  # noqa: E402
-from flag_safety import CATEGORIES  # noqa: E402
+from scope.safety import FLAGGED  # noqa: E402
 from layer_dials import PRIVATE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -37,8 +38,6 @@ SITE = ROOT / "site"
 # Studio's private map pages link back to Studio; llama-server wants the .html
 STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], ["Layer 12", "layer-12.html"], ["Layer 24", "layer-24.html"], ["Layer 36", "layer-36.html"]]
 # near misses of the categories that a shared page should leave out too
-EXTRA = ""  # keyword list kept private, see scope/safety.py
-FLAGGED = re.compile("|".join(f"(?:{p})" for p in [*CATEGORIES.values(), EXTRA]), re.I)
 SAFETY_OPTION = re.compile(r'\s*<option value="safety">[^<]*</option>')
 
 
