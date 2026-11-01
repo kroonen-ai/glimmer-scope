@@ -277,20 +277,6 @@ def sweep(
             for r in rows
             if r["latent"] not in scored
         ]
-    # Safety-flagged features never go to Muse Spark: judging their steered text trips Meta's
-    # content filter, and repeated trips got the API key blocked (2026-11-01). They stay unscored,
-    # listed with the reason, and keep their private Safety dials.
-    from scope.safety import flagged
-
-    left_out = [f for f in features if flagged(f"{f['label']} {f.get('persona', '')}")]
-    kept = [f for f in features if not flagged(f"{f['label']} {f.get('persona', '')}")]
-    if left_out:
-        with open(f"{base}/steerability-skipped.jsonl", "a") as skipped:
-            for f in left_out:
-                skipped.write(json.dumps({"latent": f["latent"], "label": f["label"],
-                                              "reason": "safety-flagged: not sent to Muse Spark"}) + "\n")
-        print(f"left {len(left_out)} safety-flagged features out of judging", flush=True)
-    features = kept
     # A seeded shuffle, then by guessed steerability, so the sample spans every firing rate.
     random.Random(0).shuffle(features)
     features.sort(key=lambda f: -f["steer"])

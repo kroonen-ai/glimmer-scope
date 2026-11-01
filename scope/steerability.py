@@ -129,8 +129,12 @@ def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict
         raise RuntimeError(f"Meta's filter has rejected {strikes()} requests on this key; judging is off until Robin decides")
     prompt = judge_prompt(feature, contexts, baseline, steered)
     if term := screen(prompt):
-        raise Screened(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
-                                   "reason": f"screened: the judge request mentions {term!r}, not sent to Muse Spark"}))
+        # not sent to Meta now, but kept whole: label, contexts, baseline and every steered reply,
+        # so it can be judged later without generating anything again
+        raise Screened(json.dumps({"latent": feature.get("latent"), "name": feature.get("name"), "label": feature.get("label", ""),
+                                   "reason": f"screened: the judge request mentions {term!r}, not sent to Muse Spark yet",
+                                   "contexts": contexts, "baseline": baseline,
+                                   "steered": {str(s): answers for s, answers in steered.items()}}))
     try:
         verdict = json_from(chat(prompt))
     except RuntimeError as error:
