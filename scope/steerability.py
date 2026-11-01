@@ -108,13 +108,26 @@ class Screened(Exception):
     """A judge prompt that touches sensitive subjects: never sent to Muse Spark (see scope.safety.screen)."""
 
 
+class Filtered(Exception):
+    """Meta's content filter rejected a judge request; each one counts against the API key."""
+
+
+FILTER_LIMIT = 2  # a sweep stops itself, and its queue, after this many filter rejections
+_filtered = 0
+
+
 def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
     prompt = judge_prompt(feature, contexts, baseline, steered)
-    # The steered replies are what trip Meta's filter (the same contexts labeled 300k features cleanly).
-    if term := screen(" ".join([feature.get("label", ""), *(a for answers in steered.values() for a in answers)])):
+    if term := screen(prompt):
         raise Screened(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
-                                   "reason": f"screened: a steered reply mentions {term!r}, not sent to Muse Spark"}))
-    verdict = json_from(chat(prompt))
+                                   "reason": f"screened: the judge request mentions {term!r}, not sent to Muse Spark"}))
+    try:
+        verdict = json_from(chat(prompt))
+    except RuntimeError as error:
+        if "content_policy" in str(error):
+            raise Filtered(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
+                                       "reason": "Meta's content filter rejected the judge request", "prompt": prompt}))
+        raise
     value, strength = score(verdict)
     return {
         "latent": feature.get("latent"),
@@ -197,6 +210,22 @@ def _write(out, future) -> int:
     except Screened as screened:
         with open(out.name.replace(".jsonl", "-screened.jsonl"), "a") as kept_out:
             kept_out.write(str(screened) + "\n")
+        return 0
+    except Filtered as filtered:
+        # Kept on this machine to tighten the screen; never sent anywhere.
+        global _filtered
+        _filtered += 1
+        with open(out.name.replace(".jsonl", "-filtered.jsonl"), "a") as kept_out:
+            kept_out.write(str(filtered) + "\n")
+        print(f"judge failed: Meta's content filter rejected a request ({_filtered} this run)", flush=True)
+        if _filtered >= FILTER_LIMIT:
+            import os
+            import subprocess
+
+            print(f"STOPPING: {_filtered} filter rejections; stopping before the Meta key gets blocked", flush=True)
+            out.flush()
+            subprocess.run(["tmux", "kill-session", "-t", "=queue2"], check=False)
+            os._exit(3)
         return 0
     except Exception as error:
         print(f"judge failed: {error}", flush=True)
