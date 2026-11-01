@@ -12,7 +12,6 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scope.safety import flagged  # noqa: E402
 from scope.steerability import STRIKES, Filtered, Screened, judge  # noqa: E402
 
 
@@ -21,8 +20,6 @@ STOP: list = []  # set at the first filter rejection; later jobs are not sent
 
 def one(job):
     feature = job["feature"]
-    if flagged(feature.get("label", "")):
-        return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "safety-flagged: not sent to Muse Spark"}
     if STOP:
         return {"latent": feature.get("latent"), "name": feature.get("name"), "error": "not sent: stopped after a filter rejection"}
     try:

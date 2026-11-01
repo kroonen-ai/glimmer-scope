@@ -112,7 +112,7 @@ class Filtered(Exception):
     """Meta's content filter rejected a judge request; each one counts against the API key."""
 
 
-FILTER_LIMIT = 1  # a sweep stops itself, and its queue, at the first filter rejection
+FILTER_LIMIT = 1  # a sweep stops itself, and every queue, at the first filter rejection
 STRIKE_BUDGET = 6  # rejections the current key may take across all runs before judging refuses to start
 STRIKES = "/scope/filter-strikes.log"
 _filtered = 0
@@ -240,7 +240,11 @@ def _write(out, future) -> int:
 
             print(f"STOPPING: {_filtered} filter rejections; stopping before the Meta key gets blocked", flush=True)
             out.flush()
-            subprocess.run(["tmux", "kill-session", "-t", "=queue2"], check=False)
+            # whichever queue is running (queue2 handed over to queue3): stop it so nothing else is sent
+            sessions = subprocess.run(["tmux", "ls", "-F", "#S"], capture_output=True, text=True).stdout.split()
+            for session in sessions:
+                if session.startswith("queue"):
+                    subprocess.run(["tmux", "kill-session", "-t", f"={session}"], check=False)
             os._exit(3)
         return 0
     except Exception as error:

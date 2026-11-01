@@ -629,8 +629,10 @@ def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
     from pathlib import Path
 
     from scope.archetype import ARCHETYPES, slug, target_judge
+    from scope.steerability import STRIKES, Filtered, Screened
 
     base = Path(f"{OUTPUT_DIR}/{run}/archetypes")
+    stop = []  # set at the first filter rejection: it is recorded as a strike and nothing more is sent
     jobs = []
     for name, spec in ARCHETYPES.items():
         path = base / slug(name) / f"steerability-{checkpoint}.jsonl"
@@ -639,8 +641,19 @@ def retarget(run: str, workers: int = 16, checkpoint: str = "final"):
 
     def run_one(job):
         name, spec, entry = job
+        candidate = entry.get("name") or entry.get("latent")
+        if stop:
+            return name, {"candidate": candidate, "error": "not sent: stopped after a filter rejection"}
         try:
             return name, target_judge(name, spec, entry)
+        except Screened as screened:
+            return name, {"candidate": candidate, "error": str(screened)}
+        except Filtered as filtered:
+            stop.append(str(filtered))
+            with open(STRIKES, "a") as strike_log:
+                strike_log.write(str(filtered) + "\n")
+            print(f"STOPPING: Meta's content filter rejected {filtered}; nothing more is sent", flush=True)
+            return name, {"candidate": candidate, "error": "Meta's content filter rejected it; retarget stopped"}
         except Exception as error:
             return name, {"candidate": entry.get("name") or entry.get("latent"), "error": str(error)}
 
