@@ -157,15 +157,16 @@ function colorOf(p) {
 // never overlapping one already drawn and never cut by the edge
 function drawNames(items) {
   ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
-  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, t = top(), ink = css("--ink");
+  const placed = [], shown = new Set(), W = canvas.clientWidth, H = canvas.clientHeight, t = top(), ink = css("--ink");
   const room = Math.round(18 * Math.min(6, view.s / fitScale) * Math.min(1, W / 900));
   const bg = css("--panel") || "#fff";
   for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
     if (placed.length >= room) break;
+    if (shown.has(it.name)) continue;  // two regions with the same name: label the bigger one
     const w = ctx.measureText(it.name).width + 14, box = [it.X - w / 2, it.Y - 11, it.X + w / 2, it.Y + 11];
     if (box[0] < 4 || box[2] > W - 4 || box[1] < t || box[3] > H - 40) continue;
     if (placed.some((b) => box[0] < b[2] + 4 && box[2] > b[0] - 4 && box[1] < b[3] + 4 && box[3] > b[1] - 4)) continue;
-    placed.push(box);
+    placed.push(box); shown.add(it.name);
     ctx.globalAlpha = 0.92; ctx.fillStyle = bg;
     ctx.beginPath(); ctx.roundRect(box[0], box[1], w, 22, 11); ctx.fill();
     ctx.globalAlpha = 1; ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y + 0.5);
