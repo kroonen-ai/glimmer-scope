@@ -112,11 +112,21 @@ class Filtered(Exception):
     """Meta's content filter rejected a judge request; each one counts against the API key."""
 
 
-FILTER_LIMIT = 2  # a sweep stops itself, and its queue, after this many filter rejections
+FILTER_LIMIT = 1  # a sweep stops itself, and its queue, at the first filter rejection
+STRIKE_BUDGET = 6  # rejections the current key may take across all runs before judging refuses to start
+STRIKES = "/scope/filter-strikes.log"
 _filtered = 0
 
 
+def strikes() -> int:
+    import os
+
+    return sum(1 for _ in open(STRIKES)) if os.path.exists(STRIKES) else 0
+
+
 def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
+    if strikes() >= STRIKE_BUDGET:
+        raise RuntimeError(f"Meta's filter has rejected {strikes()} requests on this key; judging is off until Robin decides")
     prompt = judge_prompt(feature, contexts, baseline, steered)
     if term := screen(prompt):
         raise Screened(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
@@ -217,6 +227,8 @@ def _write(out, future) -> int:
         _filtered += 1
         with open(out.name.replace(".jsonl", "-filtered.jsonl"), "a") as kept_out:
             kept_out.write(str(filtered) + "\n")
+        with open(STRIKES, "a") as strike_log:
+            strike_log.write(json.loads(str(filtered))["label"] + "\n")
         print(f"judge failed: Meta's content filter rejected a request ({_filtered} this run)", flush=True)
         if _filtered >= FILTER_LIMIT:
             import os
