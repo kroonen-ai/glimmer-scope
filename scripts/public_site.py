@@ -99,19 +99,21 @@ def public_map(data: dict) -> tuple[dict, int]:
     return data, before - len(data["points"])
 
 
-def public_data() -> tuple[dict, dict, dict]:
-    """The filtered atlas and flat maps, with how many features each dropped."""
-    atlas, dropped = public_atlas(json.loads((RESULTS / "layer-atlas.json").read_text()))
+def public_data(full: bool = False) -> tuple[dict, dict, dict]:
+    """The atlas and flat maps with how many features each dropped: none when full (the site behind
+    Cloudflare Access), the dual-use ones otherwise."""
+    atlas = json.loads((RESULTS / "layer-atlas.json").read_text())
+    atlas, dropped = (atlas, 0) if full else public_atlas(atlas)
     counts = {"atlas": dropped}
     maps = {}
     for layer, name in MAPS.items():
         data = json.loads((RESULTS / name).read_text())
         assert data.setdefault("layer", layer) == layer  # layer 24's map predates the field
-        maps[layer], counts[layer] = public_map(data)
+        maps[layer], counts[layer] = (data, 0) if full else public_map(data)
     return atlas, maps, counts
 
 
-def apply_names(atlas: dict, maps: dict) -> int:
+def apply_names(atlas: dict, maps: dict, full: bool = False) -> int:
     if not NAMES.exists():
         return 0
     names, used = json.loads(NAMES.read_text()), 0
@@ -119,13 +121,13 @@ def apply_names(atlas: dict, maps: dict) -> int:
                                   [("map", layer, d["regions"]) for layer, d in maps.items()]:
         for reg in regions:
             name = names.get(f"{prefix}/{layer}/{reg['id']}")
-            if name and reg["size"] and not FLAGGED.search(name):
+            if name and reg["size"] and (full or not FLAGGED.search(name)):
                 reg["name"], used = name, used + 1
     return used
 
 
-def steerable(runs: Path, maps: dict) -> list[dict]:
-    """Every feature that steers at least partly, minus anything dual use, dark or explicit."""
+def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
+    """Every feature that steers at least partly; unless full, minus anything dual use, dark or explicit."""
     rows = []
     for layer in MAPS:
         run = runs / f"layer{layer}-64k-k64"
@@ -142,7 +144,7 @@ def steerable(runs: Path, maps: dict) -> list[dict]:
         for latent, r in sorted(best.items()):
             label, does = labels.get(latent) or r["label"], r.get("observed") or ""
             text = f"{label} {r['label']} {does}"
-            if r["score"] < 0.66 or latent in drop or FLAGGED.search(text) or PRIVATE.search(text):
+            if r["score"] < 0.66 or (not full and (latent in drop or FLAGGED.search(text) or PRIVATE.search(text))):
                 continue
             rows.append({"layer": layer, "id": latent, "label": label, "does": does, "score": round(r["score"], 3),
                          "strength": r.get("best_strength"), "map": latent in on_map})
@@ -173,13 +175,13 @@ def nav(current: str, links=NAV, label="Glimmer Scope") -> str:
     return f'<nav class="site-nav" id="site-nav" aria-label="{label}">{items}</nav>'
 
 
-def page(template: str, current: str, data=None, src: str | None = None, private: bool = False) -> str:
+def page(template: str, current: str, data=None, src: str | None = None, private: bool = False, full: bool = False) -> str:
     """Fill a template: the theme and header (brand + nav) for the shared site, then its data.
     private=True is Studio's own copy: every feature, safety coloring kept, Studio's nav."""
     if private:
         head = f'<div class="bar-head">{brand("Glimmer Studio")}{nav(current, STUDIO_NAV, "Glimmer Studio")}</div>'
     else:
-        template = SAFETY_OPTION.sub("", template)
+        template = template if full else SAFETY_OPTION.sub("", template)
         head = f'<div class="bar-head">{brand()}{nav(current)}</div>'
     header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}</div></header>'
     html = (template.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
@@ -193,24 +195,28 @@ def page(template: str, current: str, data=None, src: str | None = None, private
 
 
 def main():
-    runs = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else RUNS
+    # --full: nothing filtered, for glimmer.kroonen.ai behind Cloudflare Access
+    full = "--full" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--full"]
+    runs = Path(args[0]).expanduser() if args else RUNS
     out = RESULTS / "site"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
-    atlas, maps, dropped = public_data()
-    named = apply_names(atlas, maps)
-    rows = steerable(runs, maps)
-    for data in (atlas, *maps.values(), rows):
-        hits = [s for s in strings(data) if FLAGGED.search(s)]
-        assert not hits, hits[:5]
+    atlas, maps, dropped = public_data(full)
+    named = apply_names(atlas, maps, full)
+    rows = steerable(runs, maps, full)
+    if not full:
+        for data in (atlas, *maps.values(), rows):
+            hits = [s for s in strings(data) if FLAGGED.search(s)]
+            assert not hits, hits[:5]
 
     (out / "atlas.json").write_text(json.dumps(atlas, separators=(",", ":")))
-    (out / "atlas.html").write_text(page((SCRIPTS / "layer_atlas_template.html").read_text(), "atlas", src="atlas.json"))
+    (out / "atlas.html").write_text(page((SCRIPTS / "layer_atlas_template.html").read_text(), "atlas", src="atlas.json", full=full))
     print(f"atlas: dropped {dropped['atlas']}, kept " + ", ".join(f"L{m['layer']} {len(m['points'])}" for m in atlas["maps"]))
     for layer, data in maps.items():
         (out / f"layer-{layer}.json").write_text(json.dumps(data, separators=(",", ":")))
         (out / f"layer-{layer}.html").write_text(page((SCRIPTS / "feature_map_template.html").read_text(), f"layer-{layer}",
-                                                      src=f"layer-{layer}.json"))
+                                                      src=f"layer-{layer}.json", full=full))
         print(f"layer {layer} map: dropped {dropped[layer]}, kept {len(data['points'])}")
     print(f"{named} regions named by Muse Spark")
 
@@ -218,14 +224,18 @@ def main():
     print(f"steerable: {sum(r['score'] >= 0.99 for r in rows)} clean, {sum(r['score'] < 0.99 for r in rows)} partly")
     if EXAMPLES.exists():
         examples = json.loads(EXAMPLES.read_text())
-        examples["examples"] = [e for e in examples["examples"] if not FLAGGED.search(f"{e['label']} {e['does']}")]
+        if not full:
+            examples["examples"] = [e for e in examples["examples"] if not FLAGGED.search(f"{e['label']} {e['does']}")]
         (out / "examples.html").write_text(page((SCRIPTS / "examples_template.html").read_text(), "examples", data=examples))
         print(f"examples: {len(examples['examples'])}")
 
-    for path in out.glob("*.*"):
-        text = path.read_text()
-        assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
-    (out / "index.html").write_text(page((SITE / "index.html").read_text(), "./"))
+    if not full:
+        for path in out.glob("*.*"):
+            text = path.read_text()
+            assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
+    note = ("This site is private: every feature is here, safety-relevant ones included, and the maps can color them."
+            if full else "Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.")
+    (out / "index.html").write_text(page((SITE / "index.html").read_text().replace("<!--SAFETY_NOTE-->", note), "./"))
     for name in ("theme.css", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
         (out / name).parent.mkdir(exist_ok=True)
         shutil.copy(SITE / name, out / name)
