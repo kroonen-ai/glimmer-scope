@@ -103,7 +103,17 @@ def public_map(data: dict) -> tuple[dict, int]:
     return data, before - len(data["points"])
 
 
-def public_data(full: bool = False) -> tuple[dict, dict, dict]:
+def refresh_labels(data: dict, run: Path) -> None:
+    """A map keeps its layout, but its labels come from the run as it is now (labels keep arriving)."""
+    if not (run / "labels.jsonl").exists():
+        return
+    labels = {r["latent"]: r for r in map(json.loads, open(run / "labels.jsonl"))}
+    for p in data["points"]:
+        r = labels.get(p["id"])
+        p["label"], p["kind"] = (r["label"], r.get("kind")) if r and r.get("label") else ("unlabeled", "unlabeled")
+
+
+def public_data(full: bool = False, runs: Path | None = None) -> tuple[dict, dict, dict]:
     """The atlas and flat maps with how many features each dropped: none when full (the site behind
     Cloudflare Access), the dual-use ones otherwise."""
     atlas = json.loads((RESULTS / "layer-atlas.json").read_text())
@@ -113,6 +123,8 @@ def public_data(full: bool = False) -> tuple[dict, dict, dict]:
     for layer, name in MAPS.items():
         data = json.loads((RESULTS / name).read_text())
         assert data.setdefault("layer", layer) == layer  # layer 24's map predates the field
+        if runs:
+            refresh_labels(data, runs / f"layer{layer}-64k-k64")
         maps[layer], counts[layer] = (data, 0) if full else public_map(data)
         if full:  # names from the labels as they are now (labels keep arriving after a map is built)
             rename(data["regions"], data["points"], "region", "label")
@@ -329,7 +341,7 @@ def main():
     out = RESULTS / "site"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
-    atlas, maps, dropped = public_data(full)
+    atlas, maps, dropped = public_data(full, runs)
     named = apply_names(atlas, maps, full)
     rows = steerable(runs, maps, full)
     examples = json.loads(EXAMPLES.read_text()) if EXAMPLES.exists() else None
