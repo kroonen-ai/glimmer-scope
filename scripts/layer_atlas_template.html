@@ -122,6 +122,17 @@ const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
 const tip = document.getElementById("tip"), card = document.getElementById("card"), bar = document.getElementById("bar");
 const qEl = document.getElementById("q"), results = document.getElementById("results");
 const layerEl = document.getElementById("layer"), spreadEl = document.getElementById("spread"), colorEl = document.getElementById("color");
+const SAFE = window.SAFE || { on: false, TEXT: "", hide: () => false, apply() {}, onChange() {} };  // Studio pages have no switch
+for (const m of M) { SAFE.apply(m.points, ["l"]); SAFE.apply(m.regions, ["name"], ""); }
+const hiddenName = (layer, j) => SAFE.on && (DATA.hn?.[layer] || []).includes(+j);
+const safetyOpt = colorEl.querySelector('option[value="safety"]');
+function safeUI() {
+  if (!safetyOpt) return;
+  safetyOpt.hidden = safetyOpt.disabled = SAFE.on;
+  if (SAFE.on && colorEl.value === "safety") colorEl.value = "region";
+}
+safeUI();
+SAFE.onChange(() => { safeUI(); legend(); draw(); });
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
@@ -326,7 +337,7 @@ function partnerList(p, dir) {
   if (li < 0 || li >= NL) return "";
   const rows = (p[dir] || []).map(([j, c]) => {
     const q = byId[li].get(j);
-    const name = q ? `<a data-li="${li}" data-id="${j}">${esc(q.l)}</a>` : esc((DATA.names[M[li].layer] || {})[j] || "unlabeled");
+    const name = q ? `<a data-li="${li}" data-id="${j}">${esc(q.l)}</a>` : esc(hiddenName(M[li].layer, j) ? SAFE.TEXT : (DATA.names[M[li].layer] || {})[j] || "unlabeled");
     return `<li><span class="cos">${c.toFixed(2)}</span><span>${name} <span class="meta">#${j}</span></span></li>`;
   });
   const title = dir === "u" ? `Turns into, layer ${M[li].layer}` : `Comes from, layer ${M[li].layer}`;

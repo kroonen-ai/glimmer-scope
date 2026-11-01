@@ -46,6 +46,7 @@
 </main>
 <script>
 const DATA = /*DATA*/null;
+const SAFE = window.SAFE || { on: false, TEXT: "", hide: () => false, apply() {}, onChange() {} };  // Studio pages have no switch
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 // the replies are markdown: show bold, italics and bullets, drop heading marks
 const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
@@ -62,8 +63,10 @@ function render() {
   document.getElementById("grid").innerHTML =
     `<article class="card base"><div class="tagline"><span class="pill muted">Baseline</span></div><h2>Nothing turned up</h2><p class="reply">${md(DATA.baseline[pick])}</p></article>` +
     DATA.examples.map((e) => `<article class="card"><div class="tagline"><a class="pill" href="layer-${e.layer}#${e.id}">Layer ${e.layer} · #${e.id}</a><span class="pill muted">strength ${e.strength}</span></div>
-      <h2>${esc(e.label[0].toUpperCase() + e.label.slice(1))}</h2><p class="reply">${md(e.replies[pick])}</p></article>`).join("");
+      ${SAFE.hide(e) ? `<h2>${SAFE.TEXT}</h2><p class="reply meta">This example could be upsetting or misused. Turn safe browsing off in the header to read it.</p>`
+        : `<h2>${esc(e.label[0].toUpperCase() + e.label.slice(1))}</h2><p class="reply">${md(e.replies[pick])}</p>`}</article>`).join("");
 }
+SAFE.onChange(() => render());
 document.getElementById("note").textContent = `Generated with greedy decoding, so the same settings give the same text, and cut at about ${DATA.tokens} tokens. ` +
   `Strength is how hard the feature is pushed, as a fraction of the typical size of the model's activations at that layer.`;
 render();

@@ -63,6 +63,8 @@
 </main>
 <script>
 const ROWS = /*DATA*/null;
+const SAFE = window.SAFE || { on: false, TEXT: "", hide: () => false, apply() {}, onChange() {} };  // Studio pages have no switch
+SAFE.apply(ROWS, ["label", "does"]);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const layers = [...new Set(ROWS.map((r) => r.layer))].sort((a, b) => a - b);
 let layer = null, shown = 150;
@@ -92,6 +94,7 @@ function render() {
   more.textContent = `Show more (${(rows.length - shown).toLocaleString()} left)`;
 }
 document.getElementById("q").addEventListener("input", () => { shown = 150; render(); });
+SAFE.onChange(() => render());
 document.getElementById("partly").addEventListener("change", () => { shown = 150; render(); });
 document.getElementById("more").addEventListener("click", () => { shown += 300; render(); });
 render();

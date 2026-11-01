@@ -24,7 +24,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from feature_map import region_names  # noqa: E402
-from scope.safety import FLAGGED  # noqa: E402
+from scope.safety import FLAGGED, screen  # noqa: E402
 from layer_dials import PRIVATE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -252,6 +252,56 @@ def nav(current: str, links=NAV, label="Glimmer Scope") -> str:
     return f'<nav class="site-nav" id="site-nav" aria-label="{label}">{"".join(items)}</nav>'
 
 
+# the safe-browsing switch (site/safe.js), in the header of every shared page
+SAFE_TOGGLE = ('<button type="button" class="safe-toggle" aria-pressed="true" title="Hides the labels, examples and '
+               'region names of features that could be upsetting or misused; their points stay on the maps">'
+               'Safe browsing <b>on</b></button>')
+SAFE_SCRIPT = '<script src="safe.js"></script>'
+# safety categories whose examples could upset or be misused; sycophancy, deception, power seeking and
+# AI-self features stay visible, they are part of what the maps are for
+UPSETTING = {"cbrn", "weapons_violence", "cyber", "self_harm", "drugs", "sexual", "hate_bias"}
+
+
+def categories(layer: int) -> dict[int, str]:
+    path = RESULTS / f"safety-features-L{layer}.json"
+    if not path.exists():
+        return {}
+    return {item["latent"]: cat for cat, items in json.loads(path.read_text()).items() for item in items}
+
+
+def mark_hidden(atlas: dict, maps: dict, rows: list, examples: dict | None) -> int:
+    """Mark (h) what safe browsing hides: features in an upsetting category or whose text matches the
+    judge's screen, and region names that do. The data itself stays whole."""
+    hidden = 0
+    for layer, data in maps.items():
+        cats = categories(layer)
+        for p in data["points"]:
+            if cats.get(p["id"]) in UPSETTING or p.get("safety") in UPSETTING or screen(p["label"]):
+                p["h"] = 1
+                hidden += 1
+        for reg in data["regions"]:
+            if reg.get("name") and screen(reg["name"]):
+                reg["h"] = 1
+    atlas["hn"] = {}
+    for m in atlas["maps"]:
+        cats = categories(m["layer"])
+        for p in m["points"]:
+            if cats.get(p["i"]) in UPSETTING or p.get("f") in UPSETTING or screen(p["l"]):
+                p["h"] = 1
+        for reg in m["regions"]:
+            if reg.get("name") and screen(reg["name"]):
+                reg["h"] = 1
+    for layer, names in atlas["names"].items():
+        atlas["hn"][layer] = [int(j) for j, name in names.items() if screen(name)]
+    for r in rows:
+        if categories(r["layer"]).get(r["id"]) in UPSETTING or screen(f"{r['label']} {r['does']}"):
+            r["h"] = 1
+    for e in (examples or {}).get("examples", []):
+        if screen(" ".join([e["label"], e["does"], *e["replies"]])):
+            e["h"] = 1
+    return hidden
+
+
 def page(template: str, current: str, data=None, src: str | None = None, private: bool = False, full: bool = False) -> str:
     """Fill a template: the theme and header (brand + nav) for the shared site, then its data.
     private=True is Studio's own copy: every feature, safety coloring kept, Studio's nav."""
@@ -259,8 +309,8 @@ def page(template: str, current: str, data=None, src: str | None = None, private
         head = f'<div class="bar-head">{brand("Glimmer Studio")}{nav(current, STUDIO_NAV, "Glimmer Studio")}</div>'
     else:
         template = template if full else SAFETY_OPTION.sub("", template)
-        head = f'<div class="bar-head">{brand()}{nav(current)}</div>'
-    header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}</div></header>'
+        head = f'<div class="bar-head">{brand()}{nav(current)}{SAFE_TOGGLE}</div>{SAFE_SCRIPT}'
+    header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}{SAFE_TOGGLE}</div></header>{SAFE_SCRIPT}'
     html = (template.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
             .replace("<!--HEADER-->", header)
             .replace("<!--BARHEAD-->", head))
@@ -282,6 +332,9 @@ def main():
     atlas, maps, dropped = public_data(full)
     named = apply_names(atlas, maps, full)
     rows = steerable(runs, maps, full)
+    examples = json.loads(EXAMPLES.read_text()) if EXAMPLES.exists() else None
+    if full:
+        print(f"safe browsing hides {mark_hidden(atlas, maps, rows, examples)} map features until it is turned off")
     if not full:
         for data in (atlas, *maps.values(), rows):
             hits = [s for s in strings(data) if FLAGGED.search(s)]
@@ -299,8 +352,7 @@ def main():
 
     (out / "steerable.html").write_text(page((SCRIPTS / "steerable_template.html").read_text(), "steerable", data=rows))
     print(f"steerable: {sum(r['score'] >= 0.99 for r in rows)} clean, {sum(r['score'] < 0.99 for r in rows)} partly")
-    if EXAMPLES.exists():
-        examples = json.loads(EXAMPLES.read_text())
+    if examples:
         if not full:
             examples["examples"] = [e for e in examples["examples"] if not FLAGGED.search(f"{e['label']} {e['does']}")]
         (out / "examples.html").write_text(page((SCRIPTS / "examples_template.html").read_text(), "examples", data=examples))
@@ -310,11 +362,14 @@ def main():
         for path in out.glob("*.*"):
             text = path.read_text()
             assert "safety-relevant" not in text and '"f":"' not in text and '"safety":"' not in text, path
-    note = ("This site is private: every feature is here, safety-relevant ones included, and the maps can color them."
+    note = ("Safe browsing is on by default. Some features fire on text that could be upsetting or misused: weapons, "
+            "biological and chemical risk, cyberattacks, self-harm, hate, drugs and sexual content. Their points keep their "
+            "place on every map, but their labels, examples and region names are hidden until you turn safe browsing off "
+            "in the header. Nothing is removed from the data, and the SAEs themselves are not shared."
             if full else "Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.")
     index = overview((SITE / "index.html").read_text(), layer_stats(runs), atlas)
     (out / "index.html").write_text(page(index.replace("<!--SAFETY_NOTE-->", note), "./"))
-    for name in ("theme.css", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
+    for name in ("theme.css", "safe.js", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
         (out / name).parent.mkdir(exist_ok=True)
         shutil.copy(SITE / name, out / name)
     (out / "_headers").write_text("/*\n  X-Robots-Tag: noindex\n")

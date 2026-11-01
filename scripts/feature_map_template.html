@@ -109,6 +109,17 @@ const P = DATA.points, R = DATA.regions, byId = new Map(P.map((p) => [p.id, p]))
 const canvas = document.getElementById("map"), ctx = canvas.getContext("2d");
 const tip = document.getElementById("tip"), card = document.getElementById("card"), bar = document.getElementById("bar");
 const qEl = document.getElementById("q"), results = document.getElementById("results"), colorEl = document.getElementById("color");
+const SAFE = window.SAFE || { on: false, TEXT: "", hide: () => false, apply() {}, onChange() {} };  // Studio pages have no switch
+// safe browsing: hidden features keep their point and kind; their label and region name are swapped out
+SAFE.apply(P, ["label"]); SAFE.apply(R, ["name"], "");
+const safetyOpt = colorEl.querySelector('option[value="safety"]');
+function safeUI() {
+  if (!safetyOpt) return;
+  safetyOpt.hidden = safetyOpt.disabled = SAFE.on;
+  if (SAFE.on && colorEl.value === "safety") colorEl.value = "kind";
+}
+safeUI();
+SAFE.onChange(() => { safeUI(); legend(); if (selected) select(selected); else draw(); });
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
