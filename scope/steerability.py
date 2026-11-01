@@ -18,6 +18,7 @@ import torch
 
 from .label import snippet
 from .llm import chat, json_from
+from .safety import screen
 from .model import residual, steering
 
 PROMPTS = [
@@ -103,8 +104,17 @@ def score(verdict: dict) -> tuple[float, float | None]:
     return best, best_strength
 
 
+class Screened(Exception):
+    """A judge prompt that touches sensitive subjects: never sent to Muse Spark (see scope.safety.screen)."""
+
+
 def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
-    verdict = json_from(chat(judge_prompt(feature, contexts, baseline, steered)))
+    prompt = judge_prompt(feature, contexts, baseline, steered)
+    # The steered replies are what trip Meta's filter (the same contexts labeled 300k features cleanly).
+    if term := screen(" ".join([feature.get("label", ""), *(a for answers in steered.values() for a in answers)])):
+        raise Screened(json.dumps({"latent": feature.get("latent"), "label": feature.get("label", ""),
+                                   "reason": f"screened: a steered reply mentions {term!r}, not sent to Muse Spark"}))
+    verdict = json_from(chat(prompt))
     value, strength = score(verdict)
     return {
         "latent": feature.get("latent"),
@@ -184,6 +194,10 @@ def sweep(
 def _write(out, future) -> int:
     try:
         result = future.result()
+    except Screened as screened:
+        with open(out.name.replace(".jsonl", "-screened.jsonl"), "a") as kept_out:
+            kept_out.write(str(screened) + "\n")
+        return 0
     except Exception as error:
         print(f"judge failed: {error}", flush=True)
         return 0
