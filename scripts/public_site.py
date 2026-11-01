@@ -29,14 +29,16 @@ ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "results"
 SCRIPTS = Path(__file__).resolve().parent
 RUNS = Path(os.environ.get("GLIMMER_RUNS", "runs")).expanduser()
-MAPS = {12: "feature-map-L12.json", 24: "feature-map.json", 36: "feature-map-L36.json"}
+# every layer whose map is built (feature_map.py names layer 24's map without a suffix)
+MAPS = {layer: name for layer in range(1, 52)
+        if (RESULTS / (name := "feature-map.json" if layer == 24 else f"feature-map-L{layer}.json")).exists()}
 NAMES = RESULTS / "region-names.json"
 EXAMPLES = RESULTS / "steering-examples.json"
-NAV = [["Overview", "./"], ["Atlas", "atlas"], ["Layer 12", "layer-12"], ["Layer 24", "layer-24"], ["Layer 36", "layer-36"],
+NAV = [["Overview", "./"], ["Atlas", "atlas"], *[[f"Layer {layer}", f"layer-{layer}"] for layer in MAPS],
        ["Examples", "examples"], ["Steerable", "steerable"]]
 SITE = ROOT / "site"
 # Studio's private map pages link back to Studio; llama-server wants the .html
-STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], ["Layer 12", "layer-12.html"], ["Layer 24", "layer-24.html"], ["Layer 36", "layer-36.html"]]
+STUDIO_NAV = [["Studio", "./"], ["Atlas", "atlas.html"], *[[f"Layer {layer}", f"layer-{layer}.html"] for layer in MAPS]]
 # near misses of the categories that a shared page should leave out too
 SAFETY_OPTION = re.compile(r'\s*<option value="safety">[^<]*</option>')
 
