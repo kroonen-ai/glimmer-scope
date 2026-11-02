@@ -119,7 +119,9 @@ class Filtered(Exception):
     """Meta's content filter rejected a judge request; each one counts against the API key."""
 
 
-STRIKE_BUDGET = 6  # rejections the current key may take across all runs before judging stops for good
+# Robin, 2026-11-02: keep judging through rejections; if the key gets blocked every reply is still kept
+# (Unjudged) and Robin swaps the key. The budget is only a backstop.
+STRIKE_BUDGET = 50
 STRIKES = "/scope/filter-strikes.log"
 # Written at a filter rejection. From then on nothing more is sent to Spark for judging, but the GPU
 # keeps steering and every reply is kept for later.
@@ -140,10 +142,10 @@ def judging_off() -> str | None:
 
 
 def stop_judging(label: str) -> None:
+    """Record a filter rejection. Judging goes on; /scope/judging-off is now only
+    written by hand, to pause it."""
     with open(STRIKES, "a") as strike_log:
-        strike_log.write(label + "\n")
-    with open(JUDGING_OFF, "a") as flag:
-        flag.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {label}\n")
+        strike_log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {label}\n")
 
 
 def judge(feature: dict, contexts: list[str], baseline: list[str], steered: dict[float, list[str]]) -> dict:
@@ -265,8 +267,8 @@ def _write(out, future) -> int:
         with open(out.name.replace(".jsonl", "-filtered.jsonl"), "a") as kept_out:
             kept_out.write(str(filtered) + "\n")
         stop_judging(json.loads(str(filtered))["label"])
-        print(f"JUDGING OFF: Meta's content filter rejected a request ({_filtered} this run); "
-              "steering goes on and every reply is kept", flush=True)
+        print(f"FILTER REJECTION: Meta's content filter rejected a request ({_filtered} this run); "
+              "it is kept, judging goes on", flush=True)
         return 0
     except Exception as error:
         print(f"judge failed: {error}", flush=True)
