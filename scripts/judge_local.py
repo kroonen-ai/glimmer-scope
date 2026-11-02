@@ -43,7 +43,7 @@ def ask(prompt: str) -> str:
 def jobs(layer: int) -> list[dict]:
     base = RUNS / f"layer{layer}-64k-k64"
     done = set()
-    for name in ("steerability.jsonl", "steerability-local.jsonl"):
+    for name in ("steerability.jsonl", "steerability-regraded.jsonl", "steerability-local.jsonl"):
         if (base / name).exists():
             done |= {json.loads(line)["latent"] for line in open(base / name)}
     labels = {}
