@@ -103,14 +103,39 @@ def public_map(data: dict) -> tuple[dict, int]:
     return data, before - len(data["points"])
 
 
+# every file that holds steering grades; Spark's win, the local model's fill in what Spark never saw
+GRADES = (("steerability.jsonl", None), ("steerability-regraded.jsonl", None), ("steerability-personas.jsonl", None),
+          ("steerability-local.jsonl", "local"))
+LOCAL_GRADER = "a local model"
+
+
+def grades(run: Path) -> dict[int, tuple[float, str | None, dict]]:
+    """latent -> (best score, None for Spark or "local", row)."""
+    best = {}
+    for name, judge in GRADES:
+        if not (run / name).exists():
+            continue
+        for r in map(json.loads, open(run / name)):
+            cur = best.get(r["latent"])
+            if cur is None or (judge is None and (cur[1] is not None or r["score"] > cur[0])):
+                best[r["latent"]] = (r["score"], judge, r)
+    return best
+
+
 def refresh_labels(data: dict, run: Path) -> None:
     """A map keeps its layout, but its labels come from the run as it is now (labels keep arriving)."""
     if not (run / "labels.jsonl").exists():
         return
     labels = {r["latent"]: r for r in map(json.loads, open(run / "labels.jsonl"))}
+    graded = grades(run)
     for p in data["points"]:
         r = labels.get(p["id"])
         p["label"], p["kind"] = (r["label"], r.get("kind")) if r and r.get("label") else ("unlabeled", "unlabeled")
+        g = graded.get(p["id"])
+        p["score"] = g[0] if g else None
+        p.pop("j", None)
+        if g and g[1]:
+            p["j"] = 1  # graded by a local model, not Spark
 
 
 def public_data(full: bool = False, runs: Path | None = None) -> tuple[dict, dict, dict]:
@@ -152,12 +177,8 @@ def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
         if not (run / "steerability.jsonl").exists():
             continue
         labels = {r["latent"]: r["label"] for r in map(json.loads, open(run / "labels.jsonl"))}
-        best = {}
-        for name in ("steerability.jsonl", "steerability-personas.jsonl"):
-            if (run / name).exists():
-                for r in map(json.loads, open(run / name)):
-                    if r["latent"] not in best or r["score"] > best[r["latent"]]["score"]:
-                        best[r["latent"]] = r
+        graded = grades(run)
+        best = {lat: g[2] for lat, g in graded.items()}
         drop, on_map = flagged_latents(layer), {p["id"] for p in maps[layer]["points"]}
         for latent, r in sorted(best.items()):
             label, does = labels.get(latent) or r["label"], r.get("observed") or ""
@@ -165,7 +186,8 @@ def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
             if r["score"] < 0.66 or (not full and (latent in drop or FLAGGED.search(text) or PRIVATE.search(text))):
                 continue
             rows.append({"layer": layer, "id": latent, "label": label, "does": does, "score": round(r["score"], 3),
-                         "strength": r.get("best_strength"), "map": latent in on_map})
+                         "strength": r.get("best_strength"), "map": latent in on_map,
+                         **({"judge": "a local model"} if graded[latent][1] else {})})
     return rows
 
 
@@ -178,13 +200,11 @@ def layer_stats(runs: Path) -> dict:
             continue
         fired = sum(1 for _ in gzip.open(run / "catalog.jsonl.gz", "rt")) if (run / "catalog.jsonl.gz").exists() else 0
         labeled = len({json.loads(line)["latent"] for line in open(run / "labels.jsonl")}) if (run / "labels.jsonl").exists() else 0
-        best = {}
-        for name in ("steerability.jsonl", "steerability-personas.jsonl"):
-            if (run / name).exists():
-                for r in map(json.loads, open(run / name)):
-                    best[r["latent"]] = max(best.get(r["latent"], 0.0), r["score"])
+        graded = grades(run)
+        best = {lat: g[0] for lat, g in graded.items()}
         stats[layer] = {"fired": fired, "labeled": min(labeled, fired) if fired else labeled, "tested": len(best),
-                        "clean": sum(v >= 0.99 for v in best.values()), "partly": sum(0.66 <= v < 0.99 for v in best.values())}
+                        "clean": sum(v >= 0.99 for v in best.values()), "partly": sum(0.66 <= v < 0.99 for v in best.values()),
+                        "local": sum(1 for g in graded.values() if g[1])}
     return stats
 
 
@@ -227,6 +247,10 @@ def overview(template: str, stats: dict, atlas: dict) -> str:
                        + " steer cleanly. The tests start with the features most likely to steer; layers marked in progress are being labeled and tested now.")
                       if rates else "",
         "UPDATED": datetime.date.today().strftime("%B %-d, %Y"),
+        "GRADERS": (f"Muse Spark 1.3 graded {total['tested'] - sum(v['local'] for v in stats.values()):,} of the steering tests. "
+                    f"The other {sum(v['local'] for v in stats.values()):,}, on features whose text Meta's content filter would stop, "
+                    f"were graded by {LOCAL_GRADER} and are marked as such on the maps and in the list.")
+                   if sum(v["local"] for v in stats.values()) else "",
     }
     for key, value in fill.items():
         template = template.replace(f"<!--{key}-->", value)

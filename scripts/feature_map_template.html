@@ -239,7 +239,7 @@ function nearest(mx, my, reach = 64) {
 }
 function describe(p) {
   const reg = R[p.region];
-  return `<b>${esc(p.label)}</b><div class="meta">feature ${p.id} · ${esc(p.kind || "")} · ${esc(reg.name)} · ${steerWord(p.score)}</div>`;
+  return `<b>${esc(p.label)}</b><div class="meta">feature ${p.id} · ${esc(p.kind || "")} · ${esc(reg.name)} · ${steerWord(p.score)}${p.j && p.score != null ? " (graded by a local model)" : ""}</div>`;
 }
 
 function select(p) {

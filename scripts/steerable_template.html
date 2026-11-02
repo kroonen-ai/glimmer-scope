@@ -85,7 +85,7 @@ function render() {
   const clean = rows.filter((r) => r.score >= 0.99).length;
   document.getElementById("count").textContent = `${rows.length.toLocaleString()} features` + (partly ? ` (${clean.toLocaleString()} clean)` : "");
   document.getElementById("list").innerHTML = rows.length ? rows.slice(0, shown).map((r) => `<li class="row">
-      <div><div class="label">${esc(r.label)}</div><div class="meta">layer ${r.layer} · ${r.map ? `<a href="layer-${r.layer}#${r.id}">#${r.id} on the map</a>` : `#${r.id}`}${r.strength ? ` · best at ${r.strength}` : ""}</div></div>
+      <div><div class="label">${esc(r.label)}</div><div class="meta">layer ${r.layer} · ${r.map ? `<a href="layer-${r.layer}#${r.id}">#${r.id} on the map</a>` : `#${r.id}`}${r.strength ? ` · best at ${r.strength}` : ""}${r.judge ? ` · graded by ${esc(r.judge)}` : ""}</div></div>
       <div class="does">${esc(r.does)}</div>
       <div class="tag ${r.score >= 0.99 ? "clean" : "part"}">${r.score >= 0.99 ? "steers cleanly" : "steers partly"}</div>
     </li>`).join("") : `<li class="empty">Nothing matches. Try another word${partly ? "" : ", or include the ones that steer partly"}.</li>`;
