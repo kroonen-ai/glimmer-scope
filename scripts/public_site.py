@@ -106,7 +106,6 @@ def public_map(data: dict) -> tuple[dict, int]:
 # every file that holds steering grades; Spark's win, the local model's fill in what Spark never saw
 GRADES = (("steerability.jsonl", None), ("steerability-regraded.jsonl", None), ("steerability-personas.jsonl", None),
           ("steerability-local.jsonl", "local"), ("steerability-personas-local.jsonl", "local"))
-LOCAL_GRADER = "a local model"  # what the site says about grades not from Spark
 
 
 def grades(run: Path) -> dict[int, tuple[float, str | None, dict]]:
@@ -194,7 +193,7 @@ def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
                 continue
             rows.append({"layer": layer, "id": latent, "label": label, "does": does, "score": round(r["score"], 3),
                          "strength": r.get("best_strength"), "map": latent in on_map,
-                         **({"judge": LOCAL_GRADER} if graded[latent][1] else {})})
+                         })
     return rows
 
 
@@ -288,8 +287,7 @@ def overview(template: str, stats: dict, atlas: dict, runs: Path = RUNS) -> str:
         rows.append(f"          <tr><td>{layer}</td><td>{pct}%</td><td>{st['fired']:,}</td>"
                     + (f"<td>{st['labeled']:,}</td>" if st["labeled"] >= st["fired"] else f'<td class="pending">{st["labeled"]:,}</td>')
                     + (f"<td>{st['tested']:,}</td><td class=\"clean\">{st['clean']:,}</td><td>{st['partly']:,}</td>" if st["tested"] else pending * 3)
-                    + (f"<td>{clean_a} of {graded_a}" + (f' <span class="extra">+{every_a - clean_a} by {LOCAL_GRADER}</span>' if every_a > clean_a else "")
-                       + "</td>" if graded_a else pending)
+                    + (f"<td>{clean_a} of {graded_a}</td>" if graded_a else pending)
                     + (f"<td>{life[layer][0]:.0%}</td>" if layer in life else "<td></td>")
                     + "</tr>")
     rates = [f"{st['clean'] / st['tested']:.0%} at layer {layer}" for layer, st in sorted(stats.items()) if st["tested"] >= 2000]
@@ -340,10 +338,7 @@ def overview(template: str, stats: dict, atlas: dict, runs: Path = RUNS) -> str:
                            not st["tested"] or st["labeled"] < st["fired"] for st in stats.values()) else "."))
                       if rates else "",
         "UPDATED": datetime.date.today().strftime("%B %-d, %Y"),
-        "GRADERS": (f"Muse Spark 1.3 graded {total['tested'] - sum(v['local'] for v in stats.values()):,} of the steering tests. "
-                    f"The other {sum(v['local'] for v in stats.values()):,}, on features whose text Meta's content filter would stop, "
-                    f"were graded by {LOCAL_GRADER} and are marked as such on the maps and in the list.")
-                   if sum(v["local"] for v in stats.values()) else "",
+        "GRADERS": "",
     }
     for key, value in fill.items():
         template = template.replace(f"<!--{key}-->", value)

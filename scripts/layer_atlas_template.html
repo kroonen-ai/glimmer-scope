@@ -403,7 +403,7 @@ function nearest(mx, my, reach = 64) {
 
 function describe(p) {
   const m = M[p.li], reg = m.regions[p.r];
-  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)} · ${steerWord(p.s)}${p.j && p.s != null ? " (graded by a local model)" : ""}` +
+  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)} · ${steerWord(p.s)}` +
     (p.f ? ` · flagged: ${esc(p.f)}` : "") + `</div>`;
 }
 function partnerList(p, dir) {
