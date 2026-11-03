@@ -106,7 +106,7 @@ def public_map(data: dict) -> tuple[dict, int]:
 # every file that holds steering grades; Spark's win, the local model's fill in what Spark never saw
 GRADES = (("steerability.jsonl", None), ("steerability-regraded.jsonl", None), ("steerability-personas.jsonl", None),
           ("steerability-local.jsonl", "local"), ("steerability-personas-local.jsonl", "local"))
-LOCAL_GRADER = "a local model"
+LOCAL_GRADER = "a local model"  # what the site says about grades not from Spark
 
 
 def grades(run: Path) -> dict[int, tuple[float, str | None, dict]]:
@@ -194,7 +194,7 @@ def steerable(runs: Path, maps: dict, full: bool = False) -> list[dict]:
                 continue
             rows.append({"layer": layer, "id": latent, "label": label, "does": does, "score": round(r["score"], 3),
                          "strength": r.get("best_strength"), "map": latent in on_map,
-                         **({"judge": "a local model"} if graded[latent][1] else {})})
+                         **({"judge": LOCAL_GRADER} if graded[latent][1] else {})})
     return rows
 
 
@@ -288,7 +288,7 @@ def overview(template: str, stats: dict, atlas: dict, runs: Path = RUNS) -> str:
         rows.append(f"          <tr><td>{layer}</td><td>{pct}%</td><td>{st['fired']:,}</td>"
                     + (f"<td>{st['labeled']:,}</td>" if st["labeled"] >= st["fired"] else f'<td class="pending">{st["labeled"]:,}</td>')
                     + (f"<td>{st['tested']:,}</td><td class=\"clean\">{st['clean']:,}</td><td>{st['partly']:,}</td>" if st["tested"] else pending * 3)
-                    + (f"<td>{clean_a} of {graded_a}" + (f' <span class="extra">+{every_a - clean_a} by the local model</span>' if every_a > clean_a else "")
+                    + (f"<td>{clean_a} of {graded_a}" + (f' <span class="extra">+{every_a - clean_a} by {LOCAL_GRADER}</span>' if every_a > clean_a else "")
                        + "</td>" if graded_a else pending)
                     + (f"<td>{life[layer][0]:.0%}</td>" if layer in life else "<td></td>")
                     + "</tr>")

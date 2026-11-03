@@ -1,6 +1,6 @@
 /* Glimmer Scope site theme: Kroonen AI's mark and Geist, on a blue and white layout.
    Loaded after each page's own styles, so these tokens win on the shared site; the private
-   map builds locally keep the defaults inside the templates. */
+   map builds keep the defaults inside the templates. */
 @font-face {
   font-family: "Geist";
   src: url("brand/Geist-Variable.woff2") format("woff2");
