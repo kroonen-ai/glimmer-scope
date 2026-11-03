@@ -142,6 +142,8 @@ def public_data(full: bool = False, runs: Path | None = None) -> tuple[dict, dic
     """The atlas and flat maps with how many features each dropped: none when full (the site behind
     Cloudflare Access), the dual-use ones otherwise."""
     atlas = json.loads((RESULTS / "layer-atlas.json").read_text())
+    if atlas.get("files"):  # the nine-layer atlas (atlas_nine.py): one file per layer
+        atlas["maps"] = [json.loads((RESULTS / f).read_text()) for f in atlas["files"]]
     atlas, dropped = (atlas, 0) if full else public_atlas(atlas)
     counts = {"atlas": dropped}
     maps = {}
@@ -160,7 +162,9 @@ def apply_names(atlas: dict, maps: dict, full: bool = False) -> int:
     if not NAMES.exists():
         return 0
     names, used = json.loads(NAMES.read_text()), 0
-    for prefix, layer, regions in [("atlas", m["layer"], m["regions"]) for m in atlas["maps"]] + \
+    # the nine-layer atlas reuses the layer maps' regions, so the old atlas names no longer fit it
+    atlas_maps = [] if atlas.get("files") else atlas["maps"]
+    for prefix, layer, regions in [("atlas", m["layer"], m["regions"]) for m in atlas_maps] + \
                                   [("map", layer, d["regions"]) for layer, d in maps.items()]:
         for reg in regions:
             name = names.get(f"{prefix}/{layer}/{reg['id']}")
@@ -376,7 +380,13 @@ def main():
             hits = [s for s in strings(data) if FLAGGED.search(s)]
             assert not hits, hits[:5]
 
-    (out / "atlas.json").write_text(json.dumps(atlas, separators=(",", ":")))
+    if atlas.get("files"):
+        (out / "atlas").mkdir(exist_ok=True)
+        for f, m in zip(atlas["files"], atlas["maps"]):
+            (out / f).write_text(json.dumps(m, separators=(",", ":")))
+        (out / "atlas.json").write_text(json.dumps({**atlas, "maps": []}, separators=(",", ":")))
+    else:
+        (out / "atlas.json").write_text(json.dumps(atlas, separators=(",", ":")))
     (out / "atlas.html").write_text(page((SCRIPTS / "layer_atlas_template.html").read_text(), "atlas", src="atlas.json", full=full))
     print(f"atlas: dropped {dropped['atlas']}, kept " + ", ".join(f"L{m['layer']} {len(m['points'])}" for m in atlas["maps"]))
     for layer, data in maps.items():

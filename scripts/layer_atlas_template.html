@@ -110,7 +110,11 @@ const SRC = /*SRC*/null;
 const loading = document.getElementById("loading");
 let DATA = /*DATA*/null;
 if (!DATA) {
-  try { const r = await fetch(SRC); if (!r.ok) throw new Error(r.status); DATA = await r.json(); }
+  try {
+    const r = await fetch(SRC); if (!r.ok) throw new Error(r.status); DATA = await r.json();
+    // the nine-layer atlas comes as one file per layer
+    if (DATA.files) DATA.maps = await Promise.all(DATA.files.map(async (f) => { const x = await fetch(f); if (!x.ok) throw new Error(x.status); return x.json(); }));
+  }
   catch (e) { loading.textContent = "The atlas didn't load. Reload the page to try again."; throw e; }
 }
 loading.remove();
@@ -136,8 +140,8 @@ SAFE.onChange(() => { safeUI(); legend(); draw(); });
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hue = (i) => (i * 137.508) % 360;
-const LAYER_HUES = [190, 215, 255, 30, 140];  // blues from shallow to deep
-const layerColor = (li) => `hsl(${LAYER_HUES[li % LAYER_HUES.length]}, 70%, 55%)`;
+// shallow layers cool, deep layers warm, however many there are
+const layerColor = (li) => `hsl(${Math.round(200 - 175 * li / Math.max(1, NL - 1))}, 70%, 52%)`;
 const scoreColor = (s) => (s >= 0.99 ? css("--accent") : s >= 0.66 ? "#f5a524" : s > 0 ? "#8fa3b5" : "#7b6ba8");
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
@@ -329,7 +333,7 @@ function nearest(mx, my, reach = 64) {
 
 function describe(p) {
   const m = M[p.li], reg = m.regions[p.r];
-  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)} · ${steerWord(p.s)}` +
+  return `<b>${esc(p.l)}</b><div class="meta">layer ${m.layer} · feature ${p.i} · ${esc(reg.name)} · ${steerWord(p.s)}${p.j && p.s != null ? " (graded by a local model)" : ""}` +
     (p.f ? ` · flagged: ${esc(p.f)}` : "") + `</div>`;
 }
 function partnerList(p, dir) {
