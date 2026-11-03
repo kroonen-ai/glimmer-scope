@@ -6,6 +6,7 @@ with the sweep's own judge prompt and scoring, and writes {run}/steerability-loc
 copy of the runs, each row with the model that judged it. Reruns skip what is already graded.
 
     python scripts/judge_local.py 30,21,18,27,15,33        # needs torch (scope.steerability)
+    python scripts/judge_local.py 30,21 --personas          # the persona tests' kept replies
 """
 import os
 import json
@@ -40,17 +41,17 @@ def ask(prompt: str) -> str:
     raise RuntimeError("unreachable")
 
 
-def jobs(layer: int) -> list[dict]:
+def jobs(layer: int, prefix: str = "steerability") -> list[dict]:
     base = RUNS / f"layer{layer}-64k-k64"
     done = set()
-    for name in ("steerability.jsonl", "steerability-regraded.jsonl", "steerability-local.jsonl"):
+    for name in (f"{prefix}.jsonl", f"{prefix}-regraded.jsonl", f"{prefix}-local.jsonl"):
         if (base / name).exists():
             done |= {json.loads(line)["latent"] for line in open(base / name)}
     labels = {}
     if (base / "labels.jsonl").exists():
         labels = {r["latent"]: r["label"] for r in map(json.loads, open(base / "labels.jsonl"))}
     found = {}
-    for name in KEPT:
+    for name in (k.replace("steerability", prefix, 1) for k in KEPT):
         if (base / name).exists():
             for row in map(json.loads, open(base / name)):
                 if "steered" in row and row["latent"] not in done:
@@ -72,11 +73,13 @@ def grade(row: dict) -> dict:
 
 def main():
     layers = [int(x) for x in sys.argv[1].split(",")]
-    limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    work = [(layer, row) for layer in layers for row in jobs(layer)][:limit]
+    prefix = "steerability-personas" if "--personas" in sys.argv else "steerability"
+    rest = [a for a in sys.argv[2:] if a != "--personas"]
+    limit = int(rest[0]) if rest else None
+    work = [(layer, row) for layer in layers for row in jobs(layer, prefix)][:limit]
     print(f"{len(work)} kept replies to grade with {JUDGE}: " +
           ", ".join(f"L{layer} {sum(w[0] == layer for w in work)}" for layer in layers), flush=True)
-    outs = {layer: open(RUNS / f"layer{layer}-64k-k64" / "steerability-local.jsonl", "a") for layer in layers}
+    outs = {layer: open(RUNS / f"layer{layer}-64k-k64" / f"{prefix}-local.jsonl", "a") for layer in layers}
     graded = failed = 0
     with ThreadPoolExecutor(4) as pool:
         futures = {pool.submit(grade, row): layer for layer, row in work}

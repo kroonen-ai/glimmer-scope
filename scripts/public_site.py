@@ -105,7 +105,7 @@ def public_map(data: dict) -> tuple[dict, int]:
 
 # every file that holds steering grades; Spark's win, the local model's fill in what Spark never saw
 GRADES = (("steerability.jsonl", None), ("steerability-regraded.jsonl", None), ("steerability-personas.jsonl", None),
-          ("steerability-local.jsonl", "local"))
+          ("steerability-local.jsonl", "local"), ("steerability-personas-local.jsonl", "local"))
 LOCAL_GRADER = "a local model"
 
 
