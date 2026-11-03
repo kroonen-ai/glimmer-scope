@@ -90,8 +90,10 @@ def main():
         points = []
         for p, (x, y) in zip(maps[layer]["points"], placed[layer]):
             lat, r = p["id"], labels.get(p["id"])
+            labeled = bool(r and r.get("label"))
             q = {"i": lat, "x": round(float(x), 2), "y": round(float(y), 2),
-                 "l": r["label"] if r and r.get("label") else "unlabeled", "r": p["region"]}
+                 "l": r["label"] if labeled else "unlabeled", "k": (r.get("kind") or "unclear") if labeled else "unlabeled",
+                 "r": p["region"]}
             if lat in graded:
                 q["s"] = graded[lat][0]
                 if graded[lat][1]:

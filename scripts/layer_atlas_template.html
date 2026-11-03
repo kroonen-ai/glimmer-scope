@@ -92,6 +92,7 @@
   <label class="slide">Stack <input type="range" id="spread" min="0" max="100" value="0" aria-label="Stack the layers"></label>
   <button type="button" class="more-toggle" id="more" aria-expanded="false">Options</button>
   <select id="color" class="more" aria-label="Color by">
+    <option value="kind" selected>Color: kind</option>
     <option value="region">Color: region</option>
     <option value="layer">Color: layer</option>
     <option value="score">Color: steering</option>
@@ -133,7 +134,7 @@ const safetyOpt = colorEl.querySelector('option[value="safety"]');
 function safeUI() {
   if (!safetyOpt) return;
   safetyOpt.hidden = safetyOpt.disabled = SAFE.on;
-  if (SAFE.on && colorEl.value === "safety") colorEl.value = "region";
+  if (SAFE.on && colorEl.value === "safety") colorEl.value = "kind";
 }
 safeUI();
 SAFE.onChange(() => { safeUI(); legend(); draw(); });
@@ -142,6 +143,10 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const hue = (i) => (i * 137.508) % 360;
 // shallow layers cool, deep layers warm, however many there are
 const layerColor = (li) => `hsl(${Math.round(200 - 175 * li / Math.max(1, NL - 1))}, 70%, 52%)`;
+// the same kinds and colors as the layer maps; gray ones are drawn first so the colored sit on top
+const KINDS = { concept: "#0064e0", syntax: "#8b5cf6", token: "#14a38b", format: "#f29a38", unclear: "#9aa6b4", unlabeled: "#cfd5dd" };
+const KIND_ORDER = { unlabeled: 0, unclear: 1 };
+for (const m of M) m.points.sort((a, b) => (KIND_ORDER[a.k] ?? 2) - (KIND_ORDER[b.k] ?? 2));
 const scoreColor = (s) => (s >= 0.99 ? css("--accent") : s >= 0.66 ? "#f5a524" : s > 0 ? "#8fa3b5" : "#7b6ba8");
 const SAFETY = { cbrn: "#e5484d", weapons_violence: "#f76b15", cyber: "#0090ff", deception_manipulation: "#d6409f",
   power_seeking: "#8e4ec6", sycophancy: "#ffc53d", hate_bias: "#a18072", self_harm: "#e54666", drugs: "#46a758", sexual: "#f39cc7", ai_self: "#12a594" };
@@ -201,6 +206,7 @@ function fit() {
 
 function colorOf(p) {
   const mode = colorEl.value;
+  if (mode === "kind") return KINDS[p.k] || KINDS.unclear;
   if (mode === "layer") return layerColor(p.li);
   if (mode === "score") return p.s == null ? css("--dim") : scoreColor(p.s);
   if (mode === "safety") return p.f ? SAFETY[p.f] : css("--dim");
@@ -251,7 +257,8 @@ function draw() {
   canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = css("--map"); ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-  const r = Math.max(1.2, Math.min(4, view.s * 0.004)), dim = css("--dim"), ink = css("--ink");
+  // points shrink with how many there are, so 60,000 a layer stay a map and not a smear
+  const r = Math.max(1, Math.min(3.5, view.s * 0.003)), dim = css("--dim"), ink = css("--ink");
   grid = new Map();
   for (const li of visibleLayers()) {
     const focus = li === active();
@@ -268,7 +275,7 @@ function draw() {
       ctx.fillStyle = focus ? css("--accent") : css("--muted");
       ctx.fillText(`layer ${M[li].layer}`, view.ox + view.s * a - 8, view.oy + view.s * b);
     }
-    ctx.globalAlpha = t > 0 && !focus ? 0.55 : 1;
+    ctx.globalAlpha = t > 0 && !focus ? 0.55 : 0.85;
     for (const p of M[li].points) {
       const lit = !matches || matches.has(p);
       const [X, Y] = project(p, t);
@@ -385,6 +392,10 @@ function legend() {
   if (mode === "score") {
     chips = [[1, "steers cleanly"], [0.667, "partly"], [0.333, "weak"], [0, "doesn't steer"]]
       .map(([s, t]) => `<i style="background:${scoreColor(s)}"></i>${t}`).join("") + `<i style="background:${css("--muted")};opacity:.3"></i>not tested`;
+  } else if (mode === "kind") {
+    const pts = M[active()].points, count = {};
+    for (const p of pts) count[p.k] = (count[p.k] || 0) + 1;
+    chips = Object.entries(KINDS).filter(([k]) => count[k]).map(([k, c]) => `<i style="background:${c}"></i>${k} ${count[k].toLocaleString()}`).join("");
   } else if (mode === "layer") {
     chips = M.map((m, li) => `<i style="background:${layerColor(li)}"></i>layer ${m.layer}`).join("");
   }
@@ -479,7 +490,7 @@ document.addEventListener("pointerdown", (e) => { if (!results.contains(e.target
 document.getElementById("more").addEventListener("click", (e) => {
   const open = bar.classList.toggle("open"); e.target.setAttribute("aria-expanded", open); fit(); draw();
 });
-layerEl.addEventListener("input", draw);
+layerEl.addEventListener("input", () => { legend(); draw(); });
 let lastSpread = 0;
 spreadEl.addEventListener("input", () => {
   // refit when the stack opens or closes, keep the user's zoom while it moves
