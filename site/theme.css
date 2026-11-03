@@ -63,6 +63,10 @@ body { -webkit-font-smoothing: antialiased; }
 .safe-toggle:hover { border-color: var(--accent); }
 .safe-toggle b { color: var(--accent-ink); font-weight: 650; }
 :root[data-safe="off"] .safe-toggle b { color: #c2410c; }
+.toggles { display: flex; align-items: center; gap: 6px; flex: none; }
+.theme-toggle { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--panel);
+                color: var(--ink); border-radius: 999px; font: 15px/1 inherit; font-family: inherit; cursor: pointer; padding: 0; }
+.theme-toggle:hover { border-color: var(--accent); }
 
 /* document pages: header, sections, buttons, cards, footer */
 .site-header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(12px);

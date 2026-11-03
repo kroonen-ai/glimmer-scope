@@ -44,3 +44,33 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", render);
   else render();
 })();
+
+// Light or dark: follows the system until the switch picks one, then remembers it. Pages that draw
+// on a canvas listen for "themechange" and redraw with the new colors.
+(() => {
+  const KEY = "glimmer-theme", root = document.documentElement;
+  const systemDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
+  const current = () => root.dataset.theme || (systemDark() ? "dark" : "light");
+  function label() {
+    for (const b of document.querySelectorAll(".theme-toggle")) {
+      const dark = current() === "dark";
+      b.textContent = dark ? "☀" : "☾";
+      b.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+      b.title = b.getAttribute("aria-label");
+    }
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest && e.target.closest(".theme-toggle");
+    if (!b) return;
+    root.dataset.theme = current() === "dark" ? "light" : "dark";
+    try { localStorage.setItem(KEY, root.dataset.theme); } catch (err) { /* not remembered */ }
+    label();
+    window.dispatchEvent(new Event("themechange"));
+  });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!root.dataset.theme) { label(); window.dispatchEvent(new Event("themechange")); }
+  });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", label);
+  else label();
+})();
+

@@ -215,15 +215,60 @@ def layer_stats(runs: Path) -> dict:
     return stats
 
 
+def archetypes(runs: Path, layer: int) -> tuple[int, int]:
+    """(clean, graded) archetypes on a layer, from retarget's targets-final.json."""
+    path = runs / f"layer{layer}-64k-k64" / "archetypes" / "targets-final.json"
+    if not path.exists():
+        return 0, 0
+    scores = [((v.get("best") or {}).get("target_score") or 0) for v in json.loads(path.read_text()).values()]
+    return sum(x >= 0.99 for x in scores), len(scores)
+
+
+def lifespans(atlas: dict, threshold: float = 0.3) -> dict[int, tuple[float, float, int]]:
+    """Per atlas layer: share of features whose thread (strongest partner while >= threshold) runs
+    through every layer, share living on one layer only, and the feature count."""
+    maps = atlas["maps"]
+    n = len(maps)
+    ids = [{p["i"]: p for p in m["points"]} for m in maps]
+
+    def best(li, p, key, step):
+        if not 0 <= li + step < n:
+            return None
+        for j, c in p.get(key, []):
+            if j in ids[li + step]:
+                return j, c
+        return None
+
+    up = [{} for _ in range(n)]
+    down = [{} for _ in range(n)]
+    for li in range(n - 1, -1, -1):
+        for p in maps[li]["points"]:
+            b = best(li, p, "u", 1)
+            up[li][p["i"]] = 1 + up[li + 1][b[0]] if b and b[1] >= threshold else 0
+    for li in range(n):
+        for p in maps[li]["points"]:
+            b = best(li, p, "d", -1)
+            down[li][p["i"]] = 1 + down[li - 1][b[0]] if b and b[1] >= threshold else 0
+    out = {}
+    for li, m in enumerate(maps):
+        spans = [up[li][p["i"]] + down[li][p["i"]] + 1 for p in m["points"]]
+        out[m["layer"]] = (sum(x == n for x in spans) / len(spans), sum(x == 1 for x in spans) / len(spans), len(spans))
+    return out
+
+
 def and_list(items) -> str:
     items = [str(i) for i in items]
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def overview(template: str, stats: dict, atlas: dict) -> str:
+def overview(template: str, stats: dict, atlas: dict, runs: Path = RUNS) -> str:
     layers = sorted(stats)
     total = {k: sum(v[k] for v in stats.values()) for k in ("fired", "labeled", "tested", "clean")}
     span = f"{layers[0]} to {layers[-1]}"
+    life = lifespans(atlas) if len(atlas["maps"]) > 1 and any("u" in p for p in atlas["maps"][0]["points"][:200]) else {}
+    arch = {layer: archetypes(runs, layer) for layer in layers}
+    all9 = sum(v[0] * v[2] for v in life.values()) / max(1, sum(v[2] for v in life.values())) if life else 0
+    one = sum(v[1] * v[2] for v in life.values()) / max(1, sum(v[2] for v in life.values())) if life else 0
     stat = lambda big, small: f'    <div class="stat"><b>{big}</b><span>{small}</span></div>'  # noqa: E731
     cards, rows = [], []
     for layer in layers:
@@ -233,25 +278,57 @@ def overview(template: str, stats: dict, atlas: dict) -> str:
             cards.append(f'      <a href="layer-{layer}"><span class="tag">Map</span><b>Layer {layer}</b>'
                          f'<span>{pct}% of the way in. {st["fired"]:,} features, {tested}.</span><em>Open layer {layer}</em></a>')
         pending = '<td class="pending">in progress</td>'
+        clean_a, graded_a = arch[layer]
         rows.append(f"          <tr><td>{layer}</td><td>{pct}%</td><td>{st['fired']:,}</td>"
                     + (f"<td>{st['labeled']:,}</td>" if st["labeled"] >= st["fired"] else f'<td class="pending">{st["labeled"]:,}</td>')
                     + (f"<td>{st['tested']:,}</td><td class=\"clean\">{st['clean']:,}</td><td>{st['partly']:,}</td>" if st["tested"] else pending * 3)
+                    + (f"<td>{clean_a} of {graded_a}</td>" if graded_a else pending)
+                    + (f"<td>{life[layer][0]:.0%}</td>" if layer in life else "<td></td>")
                     + "</tr>")
     rates = [f"{st['clean'] / st['tested']:.0%} at layer {layer}" for layer, st in sorted(stats.items()) if st["tested"] >= 2000]
+    rate = {layer: st["clean"] / st["tested"] for layer, st in stats.items() if st["tested"] >= 2000}
+    top_rate = max(rate.values()) if rate else 0
+    mid = sorted(layer for layer, r in rate.items() if r >= 0.75 * top_rate)
+    rest = [r for layer, r in rate.items() if layer not in mid]
+    best_arch = max(layers, key=lambda layer: arch[layer][0])
+    finding = lambda big, title, text: f'      <div class="finding"><b>{big}</b><h3>{title}</h3><p>{text}</p></div>'  # noqa: E731
+    findings = []
+    if rate:
+        findings.append(finding(f"{top_rate:.0%}", "Steering peaks mid-network",
+                                f"About {min(rate[x] for x in mid):.0%} to {top_rate:.0%} of tested features steer cleanly at layers "
+                                f"{and_list(mid)}, against {min(rest):.0%} to {max(rest):.0%} near the start and the end."
+                                if rest else f"of tested features steer cleanly at layer {mid[0]}."))
+    if life:
+        findings.append(finding(f"{all9:.0%}", "A stable backbone",
+                                f"of features belong to a thread that runs through all {len(layers)} layers, and {one:.0%} live on one layer "
+                                f"only. Shallow layers keep their concepts ({life[layers[0]][0]:.0%} of layer {layers[0]} runs all the way), deep "
+                                f"ones add their own ({life[layers[-1]][1]:.0%} of layer {layers[-1]} exists there only)."))
+    if arch[best_arch][1]:
+        findings.append(finding(f"{arch[best_arch][0]} of {arch[best_arch][1]}", "Characters at every depth",
+                                f"Character archetypes, from pirate captain to gaslighter, show up as steering directions on every layer. "
+                                f"The most play cleanly at layer {best_arch}."))
     atlas_layers = [m["layer"] for m in atlas["maps"]]
     fill = {
         "LEDE": f"Sparse autoencoders on {len(layers)} layers of Meta's open weight 30B model, every third from {span}: "
-                "each feature that fired, what it responds to, and whether turning it up steers the model.",
-        "STATS": "\n".join([stat(len(layers), f"layers, {span}"), stat(f"{total['fired']:,}", "features that fired"),
-                            stat(f"{total['labeled']:,}", "labeled so far"),
-                            stat(f"{total['tested']:,}", f"steering-tested, {total['clean']:,} steer cleanly")]),
+                "each feature that fired, what it responds to, whether turning it up steers the model, and how each concept "
+                "travels from layer to layer.",
+        "STATS": "\n".join([stat(len(layers), f"layers, {span}"),
+                            stat(f"{total['fired']:,}", "features, every one labeled" if total["labeled"] >= total["fired"] else
+                                 f"features, {total['labeled']:,} labeled so far"),
+                            stat(f"{total['tested']:,}", f"steering tests, {total['clean']:,} steer cleanly"),
+                            stat(f"{all9:.0%}" if life else len(layers), "of features run through all nine layers" if life else "layers mapped")]),
+        "FINDINGS": "\n".join(findings),
         "STEP_TRAIN": f"A sparse autoencoder on each of {len(layers)} layers of Glimmer's residual stream, every third from "
                       f"{span}, splits what the model computes into 65,536 features.",
-        "ATLAS_CARD": f"Layers {and_list(atlas_layers)} aligned. Slide between them or stack them, and click a feature to follow it up and down.",
+        "ATLAS_CARD": (f"All {len(atlas_layers)} layers lined up, every feature on each. Click one to follow its thread from layer "
+                       f"{atlas_layers[0]} to {atlas_layers[-1]}, with its splits and merges.") if atlas.get("files") else
+                      f"Layers {and_list(atlas_layers)} aligned. Slide between them or stack them, and click a feature to follow it up and down.",
         "LAYER_CARDS": "\n".join(cards),
         "TABLE_ROWS": "\n".join(rows),
         "DEPTH_NOTE": ("How well features steer depends on depth. Of the features tested so far, " + and_list(rates)
-                       + " steer cleanly. The tests start with the features most likely to steer; layers marked in progress are being labeled and tested now.")
+                       + " steer cleanly. The tests cover the features most likely to steer on each layer"
+                       + ("; layers marked in progress are being labeled and tested now." if any(
+                           not st["tested"] or st["labeled"] < st["fired"] for st in stats.values()) else "."))
                       if rates else "",
         "UPDATED": datetime.date.today().strftime("%B %-d, %Y"),
         "GRADERS": (f"Muse Spark 1.3 graded {total['tested'] - sum(v['local'] for v in stats.values()):,} of the steering tests. "
@@ -300,6 +377,10 @@ SAFE_TOGGLE = ('<button type="button" class="safe-toggle" aria-pressed="true" ti
                'region names of features that could be upsetting or misused; their points stay on the maps">'
                'Safe browsing <b>on</b></button>')
 SAFE_SCRIPT = '<script src="safe.js"></script>'
+# light or dark as chosen with the switch (safe.js), set before the page paints so it never flashes
+THEME_EARLY = ('<script>try{var t=localStorage.getItem("glimmer-theme");if(t)document.documentElement.dataset.theme=t}'
+               'catch(e){}</script>')
+THEME_TOGGLE = '<button type="button" class="theme-toggle" aria-label="Switch between light and dark">◐</button>'
 # safety categories whose examples could upset or be misused; sycophancy, deception, power seeking and
 # AI-self features stay visible, they are part of what the maps are for
 UPSETTING = {"cbrn", "weapons_violence", "cyber", "self_harm", "drugs", "sexual", "hate_bias"}
@@ -352,9 +433,10 @@ def page(template: str, current: str, data=None, src: str | None = None, private
         head = f'<div class="bar-head">{brand("Glimmer Studio")}{nav(current, STUDIO_NAV, "Glimmer Studio")}</div>'
     else:
         template = template if full else SAFETY_OPTION.sub("", template)
-        head = f'<div class="bar-head">{brand()}{nav(current)}{SAFE_TOGGLE}</div>{SAFE_SCRIPT}'
-    header = f'<header class="site-header"><div class="inner">{brand()}{nav(current)}{SAFE_TOGGLE}</div></header>{SAFE_SCRIPT}'
-    html = (template.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">')
+        head = f'<div class="bar-head">{brand()}{nav(current)}<span class="toggles">{THEME_TOGGLE}{SAFE_TOGGLE}</span></div>{SAFE_SCRIPT}'
+    header = (f'<header class="site-header"><div class="inner">{brand()}{nav(current)}<span class="toggles">{THEME_TOGGLE}{SAFE_TOGGLE}</span>'
+              f'</div></header>{SAFE_SCRIPT}')
+    html = (template.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">' + THEME_EARLY)
             .replace("<!--HEADER-->", header)
             .replace("<!--BARHEAD-->", head))
     if src:
@@ -416,9 +498,9 @@ def main():
             "place on every map, but their labels, examples and region names are hidden until you turn safe browsing off "
             "in the header. Nothing is removed from the data, and the SAEs themselves are not shared."
             if full else "Features about weapons, cyberattacks, biological and chemical risk and other dual use topics are left out of these pages.")
-    index = overview((SITE / "index.html").read_text(), layer_stats(runs), atlas)
+    index = overview((SITE / "index.html").read_text(), layer_stats(runs), atlas, runs)
     (out / "index.html").write_text(page(index.replace("<!--SAFETY_NOTE-->", note), "./"))
-    for name in ("theme.css", "safe.js", "atlas-stack.jpg", "brand/Geist-Variable.woff2"):
+    for name in ("theme.css", "safe.js", "atlas-stack-light.jpg", "atlas-stack-dark.jpg", "brand/Geist-Variable.woff2"):
         (out / name).parent.mkdir(exist_ok=True)
         shutil.copy(SITE / name, out / name)
     (out / "_headers").write_text("/*\n  X-Robots-Tag: noindex\n")

@@ -361,6 +361,7 @@ colorEl.addEventListener("change", () => { legend(); draw(); });
 document.getElementById("names").addEventListener("change", draw);
 document.getElementById("reset").addEventListener("click", () => { fit(); draw(); buildGrid(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && e.target === document.body) select(null); });
+window.addEventListener("themechange", () => { legend(); draw(); });  // the light/dark switch in the header
 window.addEventListener("resize", () => { fit(); draw(); buildGrid(); });
 fit(); legend(); draw(); buildGrid();
 const linked = byId.get(+location.hash.slice(1));

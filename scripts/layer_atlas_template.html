@@ -594,6 +594,7 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") select(null);
 });
+window.addEventListener("themechange", () => { legend(); draw(); });  // the light/dark switch in the header
 window.addEventListener("resize", () => { fit(); draw(); });
 fit(); legend(); draw();
 const link = location.hash.match(/^#L(\d+)-(\d+)$/);
