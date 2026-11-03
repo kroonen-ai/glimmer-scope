@@ -144,6 +144,9 @@ def public_data(full: bool = False, runs: Path | None = None) -> tuple[dict, dic
     atlas = json.loads((RESULTS / "layer-atlas.json").read_text())
     if atlas.get("files"):  # the nine-layer atlas (atlas_nine.py): one file per layer
         atlas["maps"] = [json.loads((RESULTS / f).read_text()) for f in atlas["files"]]
+        if full:  # region names from the labels as they are now, like the layer maps
+            for m in atlas["maps"]:
+                rename(m["regions"], m["points"], "r", "l")
     atlas, dropped = (atlas, 0) if full else public_atlas(atlas)
     counts = {"atlas": dropped}
     maps = {}

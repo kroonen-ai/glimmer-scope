@@ -161,8 +161,9 @@ if (document.getElementById("site-nav")) {  // the shared site's header names th
 layerEl.max = NL - 1;
 layerEl.value = Math.floor(NL / 2);
 const all = M.flatMap((m) => m.points);
-const minX = Math.min(...all.map((p) => p.x)), maxX = Math.max(...all.map((p) => p.x));
-const minY = Math.min(...all.map((p) => p.y)), maxY = Math.max(...all.map((p) => p.y));
+// a loop, not Math.min(...): spreading half a million points overflows the call stack
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const p of all) { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }
 const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, half = Math.max(maxX - minX, maxY - minY) / 2;
 let view = { s: 1, ox: 0, oy: 0 }, fitScale = 1, matches = null, selected = null, grid = null;
 
@@ -203,7 +204,7 @@ function colorOf(p) {
   if (mode === "layer") return layerColor(p.li);
   if (mode === "score") return p.s == null ? css("--dim") : scoreColor(p.s);
   if (mode === "safety") return p.f ? SAFETY[p.f] : css("--dim");
-  return `hsl(${hue(p.r + p.li * 41)}, 62%, 52%)`;
+  return `hsl(${hue(p.r + p.li * 41)}, 46%, 58%)`;
 }
 
 function partnerPoint(p, dir, j) {
@@ -227,16 +228,21 @@ function lineage(p) {
 }
 
 // region names, biggest region first, leaving out any that would overlap one already drawn
+// region names on small labels, biggest first: a few when zoomed out, more as you zoom in,
+// never overlapping, never twice the same, never cut by the edge
 function drawNames(items) {
-  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
-  const placed = [], W = canvas.clientWidth, H = canvas.clientHeight, bg = css("--map"), ink = css("--ink");
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "600 12px ui-sans-serif, system-ui, sans-serif";
+  const placed = [], shown = new Set(), W = canvas.clientWidth, H = canvas.clientHeight, ink = css("--ink"), bg = css("--panel") || "#fff";
+  const room = Math.round(18 * Math.min(6, view.s / fitScale) * Math.min(1, W / 900));
   for (const it of items.filter((i) => i.name).sort((a, b) => b.size - a.size)) {
-    const w = ctx.measureText(it.name).width + 10, box = [it.X - w / 2, it.Y - 9, it.X + w / 2, it.Y + 9];
-    if (box[2] < 0 || box[0] > W || box[3] < 0 || box[1] > H) continue;
-    if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
-    placed.push(box);
-    ctx.lineWidth = 3; ctx.strokeStyle = bg; ctx.strokeText(it.name, it.X, it.Y);
-    ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y);
+    if (placed.length >= room) break;
+    if (shown.has(it.name)) continue;
+    const w = ctx.measureText(it.name).width + 14, box = [it.X - w / 2, it.Y - 11, it.X + w / 2, it.Y + 11];
+    if (box[0] < 4 || box[2] > W - 4 || box[1] < 4 || box[3] > H - 40) continue;
+    if (placed.some((b) => box[0] < b[2] + 4 && box[2] > b[0] - 4 && box[1] < b[3] + 4 && box[3] > b[1] - 4)) continue;
+    placed.push(box); shown.add(it.name);
+    ctx.globalAlpha = 0.92; ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(box[0], box[1], w, 22, 11); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = ink; ctx.fillText(it.name, it.X, it.Y + 0.5);
   }
 }
 

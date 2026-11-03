@@ -138,8 +138,8 @@ function steerWord(s) {
   if (s >= 0.66) return "steers partly";
   return s > 0 ? "weak effect" : "doesn't steer";
 }
-const xs = P.map((p) => p.x), ys = P.map((p) => p.y);
-const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+for (const p of P) { if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x; if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y; }
 let view = null, fitScale = 1, matches = null, selected = null;
 
 if (document.getElementById("site-nav")) {  // the shared site's header names the page

@@ -26,7 +26,7 @@ its their his her your our is are be being been that this these those which who 
 words word text phrases phrase terms term token tokens use used using related references
 mentions mention content descriptions description general various specific common
 pattern patterns random clear generic fragments fragment contexts context variants forms concept concepts
-related etc style styles type types unlabeled unclear activation activations activates coherent consistent fires firing""".split())
+related etc style styles type types unlabeled unclear activation activations activates coherent consistent fires firing unrelated observed discernible miscellaneous mixed obvious""".split())
 
 
 def decoder(path: Path) -> np.ndarray:
