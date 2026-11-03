@@ -59,6 +59,13 @@
             border: 1px solid var(--line); border-radius: 12px; padding: 7px 12px; max-width: calc(100% - 24px); box-shadow: var(--shadow); }
   .card li { display: flex; gap: 8px; }
   .card li .cos { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 2.6em; }
+  .card ul.thread { border-left: 2px solid var(--line); margin-left: 4px; padding-left: 8px; }
+  .card ul.thread li { align-items: baseline; }
+  .card ul.thread li.here { background: var(--accent-tint); border-radius: 6px; margin-left: -6px; padding-left: 6px; }
+  .card .lyr { font-variant-numeric: tabular-nums; font-weight: 650; color: var(--accent-ink); min-width: 2.4em; }
+  .card details { margin-top: 10px; } .card summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+  .card .stackit { margin-top: 10px; font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel);
+                   color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
   .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin: 0 4px 0 8px; }
   .legend .chips { margin-top: 4px; }
   .legend .chips i { width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
@@ -95,6 +102,8 @@
     <option value="kind" selected>Color: kind</option>
     <option value="region">Color: region</option>
     <option value="layer">Color: layer</option>
+    <option value="life">Color: lifespan</option>
+    <option value="born">Color: born at layer</option>
     <option value="score">Color: steering</option>
     <option value="safety">Color: safety-relevant</option>
   </select>
@@ -208,6 +217,8 @@ function colorOf(p) {
   const mode = colorEl.value;
   if (mode === "kind") return KINDS[p.k] || KINDS.unclear;
   if (mode === "layer") return layerColor(p.li);
+  if (mode === "life") return spanColor(lifeOf(p).span);
+  if (mode === "born") return layerColor(lifeOf(p).born);
   if (mode === "score") return p.s == null ? css("--dim") : scoreColor(p.s);
   if (mode === "safety") return p.f ? SAFETY[p.f] : css("--dim");
   return `hsl(${hue(p.r + p.li * 41)}, 46%, 58%)`;
@@ -217,21 +228,61 @@ function partnerPoint(p, dir, j) {
   const li = p.li + (dir === "u" ? 1 : -1);
   return li >= 0 && li < NL ? byId[li].get(j) : null;
 }
-// the selected feature's lineage: all shown partners one layer away, then the best partner onward
-function lineage(p) {
-  const edges = [];
+// A feature's lineage: from it, follow the strongest partner up and down through every layer while
+// the link holds (THREAD), and note where the concept splits (a second partner almost as strong
+// on the next layer) or merges (another feature on the layer below that feeds the same one).
+const THREAD = 0.3, SIBLING = 0.75;
+function best(p, dir) {
+  for (const [j, c] of p[dir] || []) { const q = partnerPoint(p, dir, j); if (q) return [q, c]; }
+  return null;
+}
+function thread(p) {
+  const steps = [{ p, c: null }];
   for (const dir of ["u", "d"]) {
-    for (const [j, c] of p[dir] || []) { const q = partnerPoint(p, dir, j); if (q) edges.push([p, q, c]); }
     let cur = p;
-    for (;;) {
-      const best = (cur[dir] || []).map(([j, c]) => [partnerPoint(cur, dir, j), c]).find(([q]) => q);
-      if (!best || best[0] === p) break;
-      if (cur !== p) edges.push([cur, best[0], best[1]]);
-      cur = best[0];
+    for (let n = 0; n < NL; n++) {
+      const b = best(cur, dir);
+      if (!b || b[1] < THREAD) break;
+      const [q, c] = b;
+      const branch = (cur[dir] || []).slice(1).map(([j, cc]) => [partnerPoint(cur, dir, j), cc])
+        .filter(([o, cc]) => o && cc >= THREAD && cc >= SIBLING * c);
+      const step = { p: q, c, from: cur, dir, branch };
+      dir === "u" ? steps.push(step) : steps.unshift(step);
+      cur = q;
     }
+  }
+  return steps;  // shallowest layer first
+}
+function lineage(p) {  // [a, b, cos, kind]: the thread itself, then its splits and merges
+  const edges = [];
+  for (const st of thread(p)) {
+    if (!st.from) continue;
+    edges.push([st.from, st.p, st.c, "thread"]);
+    for (const [o, cc] of st.branch) edges.push([st.from, o, cc, "branch"]);
   }
   return edges;
 }
+
+// lifespan and birth layer of every feature's thread, computed once when a mode needs them
+let life = null;
+function lifeOf(p) {
+  if (!life) {
+    life = new Map();
+    const upLen = new Map(), downLen = new Map();
+    for (let li = NL - 1; li >= 0; li--) for (const q of M[li].points) {
+      const b = best(q, "u"); upLen.set(q, b && b[1] >= THREAD ? 1 + (upLen.get(b[0]) || 0) : 0);
+    }
+    for (let li = 0; li < NL; li++) for (const q of M[li].points) {
+      const b = best(q, "d"); downLen.set(q, b && b[1] >= THREAD ? 1 + (downLen.get(b[0]) || 0) : 0);
+    }
+    for (const m of M) for (const q of m.points) {
+      const dn = downLen.get(q);
+      life.set(q, { span: upLen.get(q) + dn + 1, born: q.li - dn });
+    }
+  }
+  return life.get(p);
+}
+const spanColor = (n) => `hsl(222, ${30 + 45 * (n - 1) / Math.max(1, NL - 1)}%, ${84 - 50 * (n - 1) / Math.max(1, NL - 1)}%)`;
 
 // region names, biggest region first, leaving out any that would overlap one already drawn
 // region names on small labels, biggest first: a few when zoomed out, more as you zoom in,
@@ -292,7 +343,7 @@ function draw() {
       if (!visibleLayers().includes(p.li) || ++n > 4000) continue;
       const [X, Y] = project(p, t); ctx.beginPath(); ctx.arc(X, Y, r + 2.5, 0, 6.283); ctx.stroke();
     }
-    if (t > 0) {  // how the matches connect across layers
+    if (t > 0 && !selected) {  // how the matches connect across layers; a selected thread takes over
       ctx.strokeStyle = css("--accent"); ctx.globalAlpha = 0.5;
       for (const p of matches) for (const [j, c] of p.u || []) {
         const q = partnerPoint(p, "u", j);
@@ -303,12 +354,18 @@ function draw() {
   }
   if (selected) {
     if (t > 0) {
-      for (const [a, b, c] of lineage(selected)) {
+      // the thread through every layer, thick; its splits and merges thin and dashed
+      for (const [a, b, c, kind] of lineage(selected)) {
         const [x1, y1] = project(a, t), [x2, y2] = project(b, t);
-        ctx.strokeStyle = b.li > a.li ? css("--up") : css("--down"); ctx.globalAlpha = 0.35 + 0.65 * c; ctx.lineWidth = 1 + 2.5 * c;
+        ctx.strokeStyle = b.li > a.li ? css("--up") : css("--down");
+        ctx.globalAlpha = kind === "thread" ? 0.45 + 0.55 * c : 0.5; ctx.lineWidth = kind === "thread" ? 1.5 + 3 * c : 1.2;
+        ctx.setLineDash(kind === "thread" ? [] : [4, 3]);
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
-      ctx.globalAlpha = 1;
+      ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.strokeStyle = ink; ctx.lineWidth = 1.5;
+      for (const st of thread(selected)) if (st.p !== selected) {
+        const [X, Y] = project(st.p, t); ctx.beginPath(); ctx.arc(X, Y, r + 3.5, 0, 6.283); ctx.stroke();
+      }
     } else {  // flat: the layouts are aligned, so partners show where they sit on their own layer
       for (const dir of ["u", "d"]) for (const [j, c] of selected[dir] || []) {
         const q = partnerPoint(selected, dir, j); if (!q) continue;
@@ -360,13 +417,34 @@ function partnerList(p, dir) {
   const title = dir === "u" ? `Turns into, layer ${M[li].layer}` : `Comes from, layer ${M[li].layer}`;
   return `<h3>${title}</h3>` + (rows.length ? `<ul>${rows.join("")}</ul>` : `<div class="meta">no partner above ${0.15}</div>`);
 }
+function timeline(p) {
+  const steps = thread(p).slice().reverse();  // deepest first, like the stack
+  if (steps.length < 2) return `<h3>Lineage</h3><div class="meta">No link of ${THREAD} or more to the layers next to it: this feature lives on this layer only.</div>`;
+  const span = steps.length, from = M[steps[steps.length - 1].p.li].layer, to = M[steps[0].p.li].layer;
+  const rows = steps.map((st, n) => {
+    const q = st.p, below = steps[n + 1];
+    // the link to the row below (one layer shallower): an up step carries it, otherwise the step below does
+    const c = st.dir === "u" ? st.c : below ? below.c : null;
+    const link = `<span class="cos">${c != null ? c.toFixed(2) : ""}</span>`;
+    const name = q === p ? `<b>${esc(q.l)}</b>` : `<a data-li="${q.li}" data-id="${q.i}">${esc(q.l)}</a>`;
+    const extra = [];
+    if (st.dir === "u" && st.branch.length) extra.push(`splits: ${st.branch.map(([o]) => `<a data-li="${o.li}" data-id="${o.i}">${esc(o.l)}</a>`).join(", ")}`);
+    if (st.dir === "d" && st.branch.length) extra.push(`merges with: ${st.branch.map(([o]) => `<a data-li="${o.li}" data-id="${o.i}">${esc(o.l)}</a>`).join(", ")}`);
+    return `<li class="step${q === p ? " here" : ""}"><span class="lyr">L${M[q.li].layer}</span>${link}<span>${name}${extra.length ? `<div class="meta">${extra.join(" · ")}</div>` : ""}</span></li>`;
+  });
+  return `<h3>Lineage: ${span} layers, ${from} to ${to}</h3><ul class="thread">${rows.join("")}</ul>` +
+    (spread() === 0 ? `<button type="button" class="stackit">Show the thread in the stack</button>` : "");
+}
 function select(p) {
   selected = p;
   history.replaceState(null, "", p ? `#L${M[p.li].layer}-${p.i}` : location.pathname + location.search);
   if (!p) { card.style.display = "none"; draw(); return; }
   if (spread() === 0 && p.li !== active()) layerEl.value = p.li;
-  card.innerHTML = `<button type="button" class="close">Close</button>${describe(p)}${partnerList(p, "d")}${partnerList(p, "u")}
-    <div class="meta" style="margin-top:8px">Numbers are how alike two features' firing is on the same ${DATA.tokens.toLocaleString()} tokens (1 = identical).</div>`;
+  card.innerHTML = `<button type="button" class="close">Close</button>${describe(p)}${timeline(p)}
+    <details><summary>All partners one layer away</summary>${partnerList(p, "d")}${partnerList(p, "u")}</details>
+    <div class="meta" style="margin-top:8px">Numbers are how alike two features' firing is on the same ${DATA.tokens.toLocaleString()} tokens (1 = identical). The thread follows the strongest partner while it stays at ${THREAD} or more.</div>`;
+  const stackit = card.querySelector(".stackit");
+  if (stackit) stackit.onclick = () => { spreadEl.value = spreadEl.max; fit(); legend(); select(p); };
   card.style.display = "block";
   card.querySelector(".close").onclick = () => select(null);
   card.querySelectorAll("a[data-id]").forEach((a) => { a.onclick = () => select(byId[+a.dataset.li].get(+a.dataset.id)); });
@@ -386,7 +464,7 @@ function focus(p) {
 function legend() {
   const el = document.getElementById("legend"), mode = colorEl.value;
   const how = spread() > 0
-    ? `Stacked: deeper layers above. Click a feature for its lineage<i style="background:${css("--down")}"></i>comes from<i style="background:${css("--up")}"></i>turns into`
+    ? `Stacked: deeper layers above. Click a feature for its thread through every layer<i style="background:${css("--down")}"></i>comes from<i style="background:${css("--up")}"></i>turns into · dashed: splits and merges`
     : `Same subject, same place on every layer. Slide Layer to move through depth, Stack to pull the layers apart.`;
   let chips = "";
   if (mode === "score") {
@@ -396,6 +474,14 @@ function legend() {
     const pts = M[active()].points, count = {};
     for (const p of pts) count[p.k] = (count[p.k] || 0) + 1;
     chips = Object.entries(KINDS).filter(([k]) => count[k]).map(([k, c]) => `<i style="background:${c}"></i>${k} ${count[k].toLocaleString()}`).join("");
+  } else if (mode === "life") {
+    const count = Array(NL + 1).fill(0);
+    for (const p of M[active()].points) count[lifeOf(p).span]++;
+    chips = count.map((n, k) => (k && n ? `<i style="background:${spanColor(k)}"></i>${k} layer${k > 1 ? "s" : ""} ${n.toLocaleString()}` : "")).join("");
+  } else if (mode === "born") {
+    const count = Array(NL).fill(0);
+    for (const p of M[active()].points) count[lifeOf(p).born]++;
+    chips = count.map((n, li) => (n ? `<i style="background:${layerColor(li)}"></i>born at ${M[li].layer} ${n.toLocaleString()}` : "")).join("");
   } else if (mode === "layer") {
     chips = M.map((m, li) => `<i style="background:${layerColor(li)}"></i>layer ${m.layer}`).join("");
   }
