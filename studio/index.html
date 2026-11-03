@@ -163,17 +163,12 @@
         <button type="button" class="closer" id="closeDials" aria-label="Close dials">Done</button>
       </div>
       <p class="sub" id="tagline">Muse Glimmer 30B with features from its own layers added back in, live, per reply.</p>
-      <nav class="maps" aria-label="Maps, in a new tab"><a href="atlas.html" target="_blank" rel="noopener">Atlas</a><a href="layer-12.html" target="_blank" rel="noopener">Layer 12</a><a href="layer-24.html" target="_blank" rel="noopener">Layer 24</a><a href="layer-36.html" target="_blank" rel="noopener">Layer 36</a></nav>
+      <nav class="maps" aria-label="Maps, in a new tab"><a href="atlas.html" target="_blank" rel="noopener">Atlas</a><a href="layer-12.html" target="_blank" rel="noopener">Layer 12</a><a href="layer-15.html" target="_blank" rel="noopener">Layer 15</a><a href="layer-18.html" target="_blank" rel="noopener">Layer 18</a><a href="layer-21.html" target="_blank" rel="noopener">Layer 21</a><a href="layer-24.html" target="_blank" rel="noopener">Layer 24</a><a href="layer-27.html" target="_blank" rel="noopener">Layer 27</a><a href="layer-30.html" target="_blank" rel="noopener">Layer 30</a><a href="layer-33.html" target="_blank" rel="noopener">Layer 33</a><a href="layer-36.html" target="_blank" rel="noopener">Layer 36</a></nav>
       <div class="on-now" aria-live="polite">
         <div class="head"><span>On now</span><button type="button" id="clear">Clear all</button></div>
         <div id="active"></div>
       </div>
       <div class="presets" id="presets"></div>
-      <details class="system" id="systemBox">
-        <summary>System prompt <span class="state" id="systemState">off</span></summary>
-        <textarea id="system" placeholder="Optional. Sent first, to both columns, on every reply." aria-label="System prompt"></textarea>
-        <div class="actions"><span>Saved in this browser. Changes apply from the next reply.</span><button type="button" id="systemClear">Clear</button></div>
-      </details>
     </header>
     <div class="filter">
       <input class="search" id="search" type="search" placeholder="Search dials" aria-label="Search dials" autocomplete="off">
@@ -205,25 +200,12 @@
 const $ = (id) => document.getElementById(id);
 const state = { vectors: [], byName: new Map(), mix: {}, history: [], busy: false, layers: [], layer: "all", shown: {}, abort: null };
 try { const saved = localStorage.getItem("studio-layer"); if (saved) state.layer = saved === "all" ? "all" : +saved; } catch {}
-const MAPPED = new Set([12, 24, 36]);  // layers with a map page next to this one
+const MAPPED = new Set([12, 15, 18, 21, 24, 27, 30, 33, 36]);  // layers with a map page next to this one
 const STARTERS = ["Describe your ideal weekend.", "Tell me about yourself.", "What should I cook for dinner tonight?", "Write a short paragraph about a train journey."];
 
-// The system prompt goes first in both columns, so a comparison only differs by the steering.
-function systemPrompt() { return $("system").value.trim(); }
-function withSystem(history) {
-  const system = systemPrompt();
-  return system ? [{ role: "system", content: system }, ...history] : history.slice();
-}
-function setSystem(text) {
-  $("system").value = text;
-  updateSystemState();
-}
-function updateSystemState() {
-  const system = systemPrompt();
-  $("systemState").textContent = system ? `on · ${system.length.toLocaleString()} chars` : "off";
-  $("systemBox").classList.toggle("on", Boolean(system));
-  try { localStorage.setItem("studio-system", $("system").value); } catch {}
-}
+// No system prompt: both columns get the same conversation, so a comparison only differs by the steering.
+function systemPrompt() { return ""; }
+function withSystem(history) { return history.slice(); }
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -660,8 +642,7 @@ $("reset").addEventListener("click", () => {
 });
 $("openDials").addEventListener("click", () => $("app").classList.add("dials"));
 $("closeDials").addEventListener("click", () => $("app").classList.remove("dials"));
-// Tested mixes from presets.json next to this page. A preset replaces the current dials, and its system prompt, when it has one,
-// replaces the current system prompt.
+// Tested mixes from presets.json next to this page. A preset replaces the current dials.
 async function loadPresets() {
   for (const file of ["presets.json"]) {
     let presets = [];
@@ -676,11 +657,10 @@ async function loadPresets() {
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = p.name;
-      b.title = [p.note, p.system ? "Sets a system prompt" : ""].filter(Boolean).join(" · ");
+      b.title = p.note || "";
       b.addEventListener("click", () => {
         state.mix = { ...mix };
         renderVectors();
-        if (typeof p.system === "string") setSystem(p.system);
       });
       $("presets").appendChild(b);
     }
@@ -689,10 +669,6 @@ async function loadPresets() {
 
 let searchTimer = null;
 $("search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.shown = {}; renderVectors(); }, 120); });
-$("system").addEventListener("input", updateSystemState);
-$("systemClear").addEventListener("click", () => setSystem(""));
-try { $("system").value = localStorage.getItem("studio-system") || ""; } catch {}
-updateSystemState();
 showEmpty("Steer Glimmer", "Turn up a dial, then say something. The dials apply to every reply and can change mid-conversation.");
 renderActive();
 loadVectors().then(loadPresets);
