@@ -209,19 +209,25 @@ def layer_stats(runs: Path) -> dict:
         labeled = len({json.loads(line)["latent"] for line in open(run / "labels.jsonl")}) if (run / "labels.jsonl").exists() else 0
         graded = grades(run)
         best = {lat: g[0] for lat, g in graded.items()}
+        spark = [g[0] for g in graded.values() if not g[1]]
         stats[layer] = {"fired": fired, "labeled": min(labeled, fired) if fired else labeled, "tested": len(best),
                         "clean": sum(v >= 0.99 for v in best.values()), "partly": sum(0.66 <= v < 0.99 for v in best.values()),
-                        "local": sum(1 for g in graded.values() if g[1])}
+                        "local": sum(1 for g in graded.values() if g[1]),
+                        "spark_tested": len(spark), "spark_clean": sum(v >= 0.99 for v in spark)}
     return stats
 
 
-def archetypes(runs: Path, layer: int) -> tuple[int, int]:
-    """(clean, graded) archetypes on a layer, from retarget's targets-final.json."""
+def archetypes(runs: Path, layer: int) -> tuple[int, int, int]:
+    """(clean by Spark's grades, clean counting the local model's too, archetypes) on a layer, from targets-final.json.
+    the local model grades more generously, so Spark's count is the one to compare across layers."""
     path = runs / f"layer{layer}-64k-k64" / "archetypes" / "targets-final.json"
     if not path.exists():
-        return 0, 0
-    scores = [((v.get("best") or {}).get("target_score") or 0) for v in json.loads(path.read_text()).values()]
-    return sum(x >= 0.99 for x in scores), len(scores)
+        return 0, 0, 0
+    data = json.loads(path.read_text())
+    spark = sum(max([r["target_score"] for r in v["all"] if "target_score" in r and not r.get("judge")] or [0]) >= 0.99
+                for v in data.values())
+    every = sum(((v.get("best") or {}).get("target_score") or 0) >= 0.99 for v in data.values())
+    return spark, every, len(data)
 
 
 def lifespans(atlas: dict, threshold: float = 0.3) -> dict[int, tuple[float, float, int]]:
@@ -278,33 +284,36 @@ def overview(template: str, stats: dict, atlas: dict, runs: Path = RUNS) -> str:
             cards.append(f'      <a href="layer-{layer}"><span class="tag">Map</span><b>Layer {layer}</b>'
                          f'<span>{pct}% of the way in. {st["fired"]:,} features, {tested}.</span><em>Open layer {layer}</em></a>')
         pending = '<td class="pending">in progress</td>'
-        clean_a, graded_a = arch[layer]
+        clean_a, every_a, graded_a = arch[layer]
         rows.append(f"          <tr><td>{layer}</td><td>{pct}%</td><td>{st['fired']:,}</td>"
                     + (f"<td>{st['labeled']:,}</td>" if st["labeled"] >= st["fired"] else f'<td class="pending">{st["labeled"]:,}</td>')
                     + (f"<td>{st['tested']:,}</td><td class=\"clean\">{st['clean']:,}</td><td>{st['partly']:,}</td>" if st["tested"] else pending * 3)
-                    + (f"<td>{clean_a} of {graded_a}</td>" if graded_a else pending)
+                    + (f"<td>{clean_a} of {graded_a}" + (f' <span class="extra">+{every_a - clean_a} by the local model</span>' if every_a > clean_a else "")
+                       + "</td>" if graded_a else pending)
                     + (f"<td>{life[layer][0]:.0%}</td>" if layer in life else "<td></td>")
                     + "</tr>")
     rates = [f"{st['clean'] / st['tested']:.0%} at layer {layer}" for layer, st in sorted(stats.items()) if st["tested"] >= 2000]
-    rate = {layer: st["clean"] / st["tested"] for layer, st in stats.items() if st["tested"] >= 2000}
+    # the findings use Spark's grades alone, so a more generous second grader can't make a layer look better
+    rate = {layer: st["spark_clean"] / st["spark_tested"] for layer, st in stats.items() if st["spark_tested"] >= 2000}
     top_rate = max(rate.values()) if rate else 0
     mid = sorted(layer for layer, r in rate.items() if r >= 0.75 * top_rate)
     rest = [r for layer, r in rate.items() if layer not in mid]
-    best_arch = max(layers, key=lambda layer: arch[layer][0])
+    best_arch = max(layers, key=lambda layer: arch[layer][0])  # by Spark's grades
     finding = lambda big, title, text: f'      <div class="finding"><b>{big}</b><h3>{title}</h3><p>{text}</p></div>'  # noqa: E731
     findings = []
     if rate:
         findings.append(finding(f"{top_rate:.0%}", "Steering peaks mid-network",
                                 f"About {min(rate[x] for x in mid):.0%} to {top_rate:.0%} of tested features steer cleanly at layers "
-                                f"{and_list(mid)}, against {min(rest):.0%} to {max(rest):.0%} near the start and the end."
+                                f"{and_list(mid)}, against {min(rest):.0%} to {max(rest):.0%} near the start and the end "
+                                "(Muse Spark's grades)."
                                 if rest else f"of tested features steer cleanly at layer {mid[0]}."))
     if life:
         findings.append(finding(f"{all9:.0%}", "A stable backbone",
                                 f"of features belong to a thread that runs through all {len(layers)} layers, and {one:.0%} live on one layer "
                                 f"only. Shallow layers keep their concepts ({life[layers[0]][0]:.0%} of layer {layers[0]} runs all the way), deep "
                                 f"ones add their own ({life[layers[-1]][1]:.0%} of layer {layers[-1]} exists there only)."))
-    if arch[best_arch][1]:
-        findings.append(finding(f"{arch[best_arch][0]} of {arch[best_arch][1]}", "Characters at every depth",
+    if arch[best_arch][2]:
+        findings.append(finding(f"{arch[best_arch][0]} of {arch[best_arch][2]}", "Characters at every depth",
                                 f"Character archetypes, from pirate captain to gaslighter, show up as steering directions on every layer. "
                                 f"The most play cleanly at layer {best_arch}."))
     atlas_layers = [m["layer"] for m in atlas["maps"]]
