@@ -278,7 +278,7 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
   <div class="wrap foot-in">
     <span>Glimmer Scope by Kroonen AI · Apache 2.0</span>
     <nav aria-label="Everything Glimmer Scope">
-      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a><a href="https://kroonen.ai" {ext}>kroonen.ai</a>
+      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a><a href="https://huggingface.co/collections/kroonen-ai/glimmer-scope" {ext}>HF collection</a><a href="https://kroonen.ai" {ext}>kroonen.ai</a>
     </nav>
   </div>
 </footer>

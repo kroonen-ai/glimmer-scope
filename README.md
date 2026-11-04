@@ -7,6 +7,7 @@ labeled, tested for steering, and followed from layer to layer.
 **[Explore the atlas](https://scope.kroonen.ai/atlas)** ·
 **[Read the report](https://scope.kroonen.ai/paper)** ([PDF](paper/glimmer-scope-report.pdf)) ·
 [the 9 SAEs](https://huggingface.co/kroonen-ai/glimmer-scope-saes) ·
+[the Hugging Face collection](https://huggingface.co/collections/kroonen-ai/glimmer-scope) ·
 [Muse Glimmer 30B](https://huggingface.co/meta-models/Muse-Glimmer-30B)
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23952447.svg)](https://doi.org/10.5281/zenodo.23952447)
