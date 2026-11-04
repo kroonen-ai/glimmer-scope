@@ -24,8 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 os.environ.setdefault("GLIMMER_SAFETY_PATTERNS", str(ROOT / "private" / "safety-patterns.json"))
 from scope import safety  # noqa: E402
+import home  # noqa: E402  (atlas-public/home.py)
 
 # more terms for the public atlas only (gore, remains, graphic harm), kept private like the patterns above
 EXTRA_FILE = Path(os.environ.get("GLIMMER_ATLAS_EXTRA", ROOT / "private" / "atlas-public-extra.json"))
@@ -33,6 +35,8 @@ _extra = json.loads(EXTRA_FILE.read_text()) if EXTRA_FILE.exists() else None
 EXTRA = re.compile("|".join(f"(?:{p})" for p in _extra["patterns"]), re.I) if _extra else None
 # and private names the page itself must never carry
 PAGE_WORDS = re.compile("|".join(_extra["page_words"]), re.I) if _extra else None
+# the report carries its author's byline, the only private word it may have
+REPORT_WORDS = re.compile("|".join(w for w in _extra["page_words"] if "robin" not in w), re.I) if _extra else None
 
 SRC = ROOT / "results" / "site"
 OUT = ROOT / "atlas-public" / "out"
@@ -237,7 +241,7 @@ def page(stats: list[dict]) -> str:
                   "  const q = qEl.value.trim();\n"
                   "  if (q.length < 2 || /^\\d+$/.test(q)) return search();\n"
                   "  try {\n"
-                  "    const r = await fetch(`api/search?q=${encodeURIComponent(q)}`); if (!r.ok) throw new Error(r.status);\n"
+                  "    const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`); if (!r.ok) throw new Error(r.status);\n"
                   "    const hits = (await r.json()).results || [];\n"
                   "    const li = new Map(M.map((m, i) => [m.layer, i]));\n"
                   "    search(hits.map((h) => byId[li.get(h.layer)]?.get(h.id)).filter(Boolean));\n"
@@ -253,13 +257,14 @@ def page(stats: list[dict]) -> str:
     load_start = t.index("const loading = document.getElementById(\"loading\");")
     load_end = t.index("loading.remove();\n", load_start) + len("loading.remove();\n")
     t = t[:load_start] + LOADER_JS + t[load_end:]
-    links = "".join(f'<a href="{u}" target="_blank" rel="noopener">{n}</a>' for n, u in
+    links = '<a href="/">Home</a>' + "".join(f'<a href="{u}" target="_blank" rel="noopener">{n}</a>' for n, u in
                     [("Code", LINKS["code"]), ("Try steering", LINKS["space"]), ("The 9 SAEs", LINKS["saes"])])
-    head = (f'<div class="bar-head">{brand()}<nav class="site-nav public-nav">{links}</nav>'
-            f'<span class="toggles">{THEME_TOGGLE}</span></div><script src="theme.js"></script>')
-    t = (t.replace("<!--THEME-->", '<link rel="stylesheet" href="theme.css">' + THEME_EARLY)
+    head = (f'<div class="bar-head">{brand().replace('href="./"', 'href="/"')}<nav class="site-nav public-nav">{links}</nav>'
+            f'<span class="toggles">{THEME_TOGGLE}</span></div><script src="/theme.js"></script>')
+    t = (t.replace("<!--THEME-->", '<link rel="icon" href="/favicon.svg" type="image/svg+xml">'
+                   '<link rel="stylesheet" href="/theme.css">' + THEME_EARLY)
           .replace("<!--HEADER-->", "").replace("<!--BARHEAD-->", head)
-          .replace("/*SRC*/null", json.dumps("data/atlas.json"))
+          .replace("/*SRC*/null", json.dumps("/data/atlas.json"))
           .replace("<title>Glimmer Layer Atlas</title>", "<title>Glimmer Scope · nine-layer atlas</title>"))
     return t
 
@@ -267,6 +272,47 @@ def page(stats: list[dict]) -> str:
 # words that only the private build may contain: anything about steering results or the safety categories
 PRIVATE_WORDS = re.compile(r"SAFETY|\bSAFE\b|safe-toggle|data-safe|scoreColor|steerWord|steers|\"score\"|"
                            r"\"safety\"|\bp\.[sf]\b")
+
+
+CODE_WORDS = re.compile(r"SAFETY|\bSAFE\b|safe-toggle|data-safe|scoreColor|steerWord|\"score\"|\"safety\"")
+ASSETS = Path(__file__).resolve().parent / "assets"
+PAPER = ROOT / "paper"
+
+
+def write_home(layers: list[dict], stats: list[dict]):
+    """The home at /, its stylesheet and hero script, the icon, the Mono face, the screenshots and the report."""
+    from public_site import THEME_EARLY, THEME_TOGGLE, brand
+
+    site = OUT / "site"
+    report = PAPER / "glimmer-scope-report.html"
+    has_paper = report.exists()
+    data = home.stack_data(layers)
+    (site / "index.html").write_text(home.home_html(stats, data, brand().replace('href="./"', 'href="/"'), THEME_EARLY,
+                                                    THEME_TOGGLE, has_paper))
+    (site / "home.css").write_text(home.HOME_CSS)
+    (site / "stack.js").write_text(home.STACK_JS)
+    mark = (ROOT / "site" / "brand" / "mark.svg.html").read_text().strip()
+    mark = mark.replace('<svg class="brand-mark"', '<svg xmlns="http://www.w3.org/2000/svg"', 1).replace(' aria-hidden="true"', "")
+    mark = mark.replace(">", "><style>.k{fill:#0a0a0c}.b{fill:#dcdce0}.c{fill:#2fae62}"
+                        "@media (prefers-color-scheme: dark){.k{fill:#f2f2f5}.b{fill:#3a3a44}.c{fill:#9fe8b8}}</style>", 1)
+    (site / "favicon.svg").write_text(mark)
+    if (ASSETS / "GeistMono-latin.woff2").exists():
+        shutil.copy2(ASSETS / "GeistMono-latin.woff2", site / "brand" / "GeistMono-latin.woff2")
+    (site / "img").mkdir(exist_ok=True)
+    for f in ASSETS.glob("*.jpg"):
+        shutil.copy2(f, site / "img" / f.name)
+    if (ASSETS / "og.png").exists():
+        shutil.copy2(ASSETS / "og.png", site / "og.png")
+    if has_paper:  # the report, as a page at /paper/ and a PDF at the root
+        (site / "paper").mkdir(exist_ok=True)
+        for f in PAPER.iterdir():
+            if f.is_file() and f.suffix in (".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".woff2", ".pdf"):
+                shutil.copy2(f, site / "paper" / ("index.html" if f == report else f.name))
+            elif f.is_dir() and f.name in ("img", "figures", "fig", "assets"):
+                shutil.copytree(f, site / "paper" / f.name)
+        pdf = PAPER / "glimmer-scope-report.pdf"
+        if pdf.exists():
+            shutil.copy2(pdf, site / "glimmer-scope-report.pdf")
 
 
 def main():
@@ -288,19 +334,21 @@ def main():
         stats.append(st)
         (OUT / "r2" / f"L{m['layer']}.json").write_text(json.dumps(m, separators=(",", ":")))
     version = hashlib.sha256(b"".join(p.read_bytes() for p in sorted((OUT / "r2").glob("L*.json")))).hexdigest()[:10]
-    public_index = {"layers": index["layers"], "files": [f"data/L{m['layer']}.json?v={version}" for m in layers],
+    public_index = {"layers": index["layers"], "files": [f"/data/L{m['layer']}.json?v={version}" for m in layers],
                     "bytes": [(OUT / "r2" / f"L{m['layer']}.json").stat().st_size for m in layers],
                     "maps": [], "names": {}, "tokens": index["tokens"], "hn": {}}
     (OUT / "r2" / "atlas.json").write_text(json.dumps(public_index, separators=(",", ":")))
     write_sql(layers, OUT / "d1" / "features.sql")
-    (OUT / "site" / "index.html").write_text(page(stats).replace('"data/atlas.json"', f'"data/atlas.json?v={version}"'))
+    shutil.copytree(SRC / "brand", OUT / "site" / "brand")
+    (OUT / "site" / "atlas").mkdir()
+    (OUT / "site" / "atlas" / "index.html").write_text(page(stats).replace('"/data/atlas.json"', f'"/data/atlas.json?v={version}"'))
+    write_home(layers, stats)
     # the light/dark switch only: the safe-browsing switch and its notes stay with the private site
     js = (SRC / "safe.js").read_text()
     (OUT / "site" / "theme.js").write_text(js[js.index("// Light or dark"):])
     css = (SRC / "theme.css").read_text()
     css = re.sub(r"^(\.safe-toggle|:root\[data-safe).*?\}\n", "", css, flags=re.M | re.S)
     (OUT / "site" / "theme.css").write_text(css)
-    shutil.copytree(SRC / "brand", OUT / "site" / "brand")
     # nothing left in the output that the public must not see
     allowed_point, allowed_region = set(KEEP) | {"l"}, {"id", "name", "size", "x", "y"}
     for p in (OUT / "r2").glob("L*.json"):
@@ -319,9 +367,14 @@ def main():
                 for j, _ in q.get(k, []):
                     assert 0 <= nb < len(layers) and j in shown[nb], (m["layer"], q["i"], k, j)
         assert not shown[li] & outs[li]
-    for f in OUT.joinpath("site").glob("*.*"):
-        hit = PRIVATE_WORDS.search(f.read_text()) or PAGE_WORDS.search(f.read_text())
-        assert not hit, (f.name, hit.group(0))
+    for f in OUT.joinpath("site").rglob("*"):
+        if f.suffix not in (".html", ".js", ".css", ".svg", ".json", ".txt"):
+            continue
+        text = f.read_text()
+        # the report may talk about features that steer; the code words and private names stay out everywhere
+        report = "paper" in f.relative_to(OUT / "site").parts
+        hit = (CODE_WORDS if report else PRIVATE_WORDS).search(text) or (REPORT_WORDS if report else PAGE_WORDS).search(text)
+        assert not hit, (str(f.relative_to(OUT / "site")), hit.group(0))
     total = sum(s["features"] for s in stats)
     left_out = sum(s["left_out"] for s in stats)
     print(f"{len(layers)} layers, {total:,} features shown, {left_out:,} left out")
