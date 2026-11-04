@@ -4,6 +4,7 @@ Looking inside Muse Glimmer 30B: sparse autoencoders on nine of its layers, ever
 labeled, tested for steering, and followed from layer to layer.
 
 **[Try it live on Hugging Face](https://huggingface.co/spaces/rob-x-ai/glimmer-scope)** ·
+**[Explore the atlas](https://scope.kroonen.ai)** ·
 [the 9 SAEs](https://huggingface.co/kroonen-ai/glimmer-scope-saes) ·
 [Muse Glimmer 30B](https://huggingface.co/meta-models/Muse-Glimmer-30B)
 
@@ -21,7 +22,7 @@ built everything around them that I needed to understand and use those features:
 - **cross-layer links** that match each feature to the ones it fires with on the next layer, so a
   concept can be followed from layer 12 to 36: where it starts, splits, merges and ends
 - **28 character archetypes** found as steering directions on every layer
-- **maps, a nine-layer atlas and Glimmer Studio**, a chat where any steerable feature becomes a
+- **maps, a [nine-layer atlas](https://scope.kroonen.ai) and Glimmer Studio**, a chat where any steerable feature becomes a
   dial on a quantized Glimmer running locally
 
 ## What it found
@@ -55,6 +56,7 @@ after it.
 | Oct 29 to 30 | feature maps, cross-layer matching, the SAEs for layers 12 and 36, a label for every feature that fires |
 | Oct 31 to Nov 1 | the site, the SAEs for layers 15 to 33 on AWS, a steering test for every feature, screening for Meta's content filter, safe browsing |
 | Nov 2 to 3 | the nine-layer atlas, threads through the layers, the findings, the SAE release and the Hugging Face Space |
+| Nov 4 | the [public atlas](https://scope.kroonen.ai) on Cloudflare |
 
 ## Quickstart
 
@@ -93,6 +95,7 @@ To steer instead, add `sae.steering_vector(feature, strength)` to the residual s
 | `persona_scan`, `archetype`, `retarget` | finds features and blends that make Glimmer play a character, then judges them for that character | `scope/archetype.py`, `scope/personas.py` |
 | `crosslayer` | runs text through the model once with two neighboring SAEs and matches features by how they fire together | `scope/crosslayer.py` |
 | maps and atlas | lays each layer's features out by their decoder directions, lines the nine layers up on their cross-layer anchors, and builds the site | `scripts/feature_map.py`, `scripts/atlas_nine.py`, `scripts/public_site.py` |
+| public atlas | the nine maps with their labels and cross-layer links at [scope.kroonen.ai](https://scope.kroonen.ai): the maps in R2, search in D1, one Cloudflare Worker | `atlas-public/` |
 
 Every step is a function in `modal_app.py`. They run on [Modal](https://modal.com), or on any box
 with one 96 GB GPU through `scripts/run_here.py`:
@@ -115,6 +118,7 @@ patch for steering per request, which Studio uses to apply dials on a quantized 
 | `META_API_KEY` | Muse Spark, for labels and judging |
 | `GLIMMER_RUNS` | where the runs live on a workstation (default `runs/`) |
 | `GLIMMER_SAFETY_PATTERNS` | the private safety patterns, see below |
+| `GLIMMER_ATLAS_EXTRA` | more private terms for the public atlas, see below |
 | `LOCAL_LLM_URL`, `LOCAL_LLM_MODEL` | a local model behind an OpenAI-compatible endpoint, for what Spark should not see |
 | `GLIMMER_BUCKET` | the S3 bucket the GPU box syncs to |
 
@@ -127,6 +131,9 @@ Some findings could be upsetting, so we filter them with safe browsing. This rep
   is screened or flagged, and the rest of the pipeline works the same.
 - **the activation data and the steering results**, including any strength at which a feature
   takes effect.
+- **features on upsetting topics, in the [public atlas](https://scope.kroonen.ai)**. They are left out entirely, with
+  their place on the map and their links to other layers, and the terms that pick them
+  (`GLIMMER_ATLAS_EXTRA`) stay private. The atlas carries no vectors and no steering results.
 
 The trained SAEs themselves are on Hugging Face, at
 [kroonen-ai/glimmer-scope-saes](https://huggingface.co/kroonen-ai/glimmer-scope-saes).

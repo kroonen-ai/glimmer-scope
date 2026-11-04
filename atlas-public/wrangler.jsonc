@@ -1,0 +1,12 @@
+// The public atlas Worker. Deploy from this folder: npx wrangler deploy
+{
+  "name": "glimmer-atlas",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "out/site", "binding": "ASSETS" },
+  "r2_buckets": [{ "binding": "ATLAS", "bucket_name": "glimmer-atlas" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "glimmer-atlas", "database_id": "bf7c439f-193d-408b-9a34-627c23c43afa" }],
+  "routes": [{ "pattern": "scope.kroonen.ai", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false
+}
