@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glimmer Scope: sparse autoencoders on nine layers of Muse Glimmer 30B</title>
+<meta name="description" content="Technical report: nine TopK sparse autoencoders on Muse Glimmer 30B, every feature labeled, steering tests, cross-layer threads and a public atlas.">
+<style>
+@font-face { font-family: Geist; src: url("Geist-Variable.woff2") format("woff2"); font-weight: 100 900; }
+:root { --ink: #1c2b33; --muted: #5d6c7b; --line: #dde4ec; --soft-line: #edf1f5; --bg: #ffffff; --panel: #f5f8fb;
+  --accent: #0064e0; --accent-ink: #0050b5; --soft: #a9c8f2; --hl: #eef4fd; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: Geist, system-ui, -apple-system, sans-serif;
+  font-size: 16px; line-height: 1.6; font-feature-settings: "tnum" 0; hyphens: auto; -webkit-font-smoothing: antialiased; }
+main { max-width: 760px; margin: 0 auto; padding: 56px 20px 80px; }
+a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+header.title { border-bottom: 1px solid var(--line); padding-bottom: 22px; margin-bottom: 26px; }
+.kicker { font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); }
+h1, h2, h3 { hyphens: manual; }
+h1 { font-size: 34px; line-height: 1.12; letter-spacing: -0.025em; font-weight: 680; margin: 10px 0 14px; }
+.byline { font-size: 15px; } .byline b { font-weight: 620; }
+.links { margin-top: 10px; font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.links span b { color: var(--ink); font-weight: 600; margin-right: 5px; }
+.abstract { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin: 0 0 30px; }
+.abstract h2 { margin: 0 0 6px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.abstract p { margin: 0; }
+h2 { font-size: 22px; letter-spacing: -0.015em; font-weight: 660; margin: 38px 0 10px; line-height: 1.25; }
+h2 .n, h3 .n { color: var(--accent-ink); font-variant-numeric: tabular-nums; margin-right: 8px; }
+h3 { font-size: 16.5px; font-weight: 640; margin: 24px 0 6px; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 12px; padding-left: 22px; } li { margin: 3px 0; }
+code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: .86em; background: var(--panel); border: 1px solid var(--soft-line);
+  border-radius: 4px; padding: 0 4px; }
+pre { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.5; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; }
+code { hyphens: none; white-space: nowrap; }
+pre code { white-space: pre; background: none; border: 0; padding: 0; font-size: inherit; }
+.eq { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13.5px; text-align: center; margin: 4px 0 14px; color: var(--ink); }
+figure { margin: 22px 0 24px; }
+figure img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 10px; }
+figure svg { width: 100%; height: auto; display: block; overflow: visible; }
+figcaption { font-size: 13.5px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+figcaption b { color: var(--ink); font-weight: 620; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; margin: 6px 0 4px; }
+th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--soft-line); }
+th { font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 12px; line-height: 1.3; vertical-align: bottom; }
+th:first-child, td:first-child { text-align: left; }
+td.l, th.l { text-align: left; }
+tr.hl td { background: var(--hl); }
+tr.total td { border-top: 1px solid var(--line); font-weight: 600; border-bottom: 0; }
+.tcap { font-size: 13.5px; color: var(--muted); margin: 18px 0 2px; } .tcap b { color: var(--ink); font-weight: 620; }
+.tablewrap { overflow-x: auto; margin-bottom: 18px; }
+.grid { stroke: var(--soft-line); stroke-width: 1; } .axis { stroke: var(--line); stroke-width: 1; }
+.mark { fill: var(--accent); } .mark.soft { fill: var(--soft); }
+.tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.val { font-size: 11px; fill: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lab { font-size: 12px; fill: var(--ink); }
+.refs { font-size: 13.5px; line-height: 1.5; padding-left: 26px; } .refs li { margin: 5px 0; }
+.note { font-size: 13.5px; color: var(--muted); }
+.warn { border-left: 3px solid var(--accent); padding: 2px 0 2px 14px; margin: 0 0 14px; }
+.contrib li::marker { color: var(--accent); }
+@media screen and (prefers-color-scheme: dark) {
+  :root { --ink: #e8eef4; --muted: #94a4b3; --line: #233242; --soft-line: #1a2633; --bg: #0b1118; --panel: #111a24;
+    --accent: #5aa2ff; --accent-ink: #84b8ff; --soft: #2c4d78; --hl: #13243a; }
+  figure img { filter: brightness(.94); }
+}
+@media (max-width: 560px) {
+  main { padding: 32px 16px 60px; } h1 { font-size: 27px; } h2 { font-size: 19px; } table { font-size: 12.5px; }
+}
+@page { size: Letter; margin: 0.8in 0.8in 0.85in; }
+@media print {
+  body { font-size: 9.6pt; line-height: 1.46; }
+  main { max-width: none; padding: 0; margin: 0; }
+  a { color: var(--accent-ink); text-decoration: none; }
+  h1 { font-size: 21pt; margin: 4pt 0 8pt; } .byline { font-size: 10pt; }
+  .links { font-size: 8.4pt; } header.title { padding-bottom: 12pt; margin-bottom: 14pt; }
+  .abstract { padding: 10pt 13pt; margin-bottom: 14pt; border-radius: 6pt; } .abstract h2 { font-size: 7.6pt; }
+  h2 { font-size: 13pt; margin: 18pt 0 5pt; break-after: avoid; } h3 { font-size: 10.6pt; margin: 11pt 0 3pt; break-after: avoid; }
+  p { margin: 0 0 6.5pt; orphans: 3; widows: 3; } li { margin: 1.5pt 0; }
+  figure { margin: 10pt 0 12pt; break-inside: avoid; } figcaption { font-size: 8.4pt; margin-top: 4pt; }
+  figure img { max-width: 5.3in; margin: 0 auto; }
+  table { font-size: 8.4pt; } th { font-size: 7.6pt; } th, td { padding: 2.6pt 5pt; }
+  .tcap { font-size: 8.4pt; margin-top: 9pt; break-after: avoid; } .tablewrap { break-inside: avoid; margin-bottom: 10pt; }
+  pre { font-size: 7.8pt; padding: 7pt 9pt; break-inside: avoid; } .eq { font-size: 8.6pt; }
+  .refs { font-size: 8.4pt; } .note, .warn { font-size: 9pt; }
+  .tick, .val { font-size: 10px; } .lab { font-size: 11px; }
+  .keep { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<main>
+<header class="title">
+  <div class="kicker">Technical report · November 2026</div>
+  <h1>Glimmer Scope: sparse autoencoders on nine layers of Muse Glimmer 30B</h1>
+  <div class="byline"><b>Robin Kroonen</b> · Kroonen AI</div>
+  <div class="links">
+    <span><b>Code</b><a href="https://github.com/kroonen-ai/glimmer-scope">github.com/kroonen-ai/glimmer-scope</a></span>
+    <span><b>SAEs</b><a href="https://huggingface.co/kroonen-ai/glimmer-scope-saes">huggingface.co/kroonen-ai/glimmer-scope-saes</a></span>
+    <span><b>Live demo</b><a href="https://huggingface.co/spaces/rob-x-ai/glimmer-scope">huggingface.co/spaces/rob-x-ai/glimmer-scope</a></span>
+    <span><b>Atlas</b><a href="https://scope.kroonen.ai">scope.kroonen.ai</a></span>
+  </div>
+</header>
+
+<section class="abstract">
+  <h2>Abstract</h2>
+  <p>I trained TopK sparse autoencoders (SAEs) with 65,536 features each on nine layers of Muse Glimmer 30B, every third
+  layer from 12 to 36 of its 52. Across the nine, 519,383 features fire on a held-out sample of 5 million tokens,
+  and every one of them has a label written from its strongest contexts. I tested 170,437 features by adding
+  them back into the residual stream on neutral prompts, with Muse Spark 1.3 grading the answers for concept and fluency.
+  Steering peaks in the middle of the network: 9.7% to 11.4% of tested features steer cleanly at layers
+  21, 24 and 27, against 1.1% to 4.2% at the other six. Matching features between neighboring layers
+  by how they fire together over 5,002,394 tokens shows a stable backbone: 43.3% of features belong
+  to a thread that runs through all nine layers, while 30.6% live on one layer only. Contrasting in-character and
+  plain answers gives steering directions for 28 character archetypes on every layer, and
+  19 of them play cleanly at layer 24. The SAEs, the code, a public atlas and a live steering
+  demo on the full-precision model are released.</p>
+</section>
+
+<h2><span class="n">1</span>Introduction</h2>
+<p>There are two usual ways to change what an open model does. You can prompt it and hope, or you can fine-tune it,
+which takes data, compute and days. A third way is to read what the model represents inside and set those things
+directly. Sparse autoencoders make that practical: they split what a layer computes into many features, and most of
+those stand for one recognizable thing, such as a subject, a style or a piece of syntax
+[<a href="#r-bricken">1</a>, <a href="#r-cunningham">2</a>, <a href="#r-templeton">3</a>]. Adding a feature's
+direction back into the residual stream then steers the model toward it [<a href="#r-turner">6</a>]. Open SAE suites
+such as Gemma Scope [<a href="#r-gemmascope">5</a>] have made this kind of work possible on other open models.</p>
+<p>Glimmer Scope applies this to Muse Glimmer 30B, Meta's open-weights model, at a scale that covers the middle half of
+its depth. I built it during the Meta Global AI Developer Hackathon, between October 28 and November 4, 2026. Its
+contributions are:</p>
+<ul class="contrib">
+  <li><b>Nine TopK SAEs</b> on Glimmer's residual stream, one on every third layer from 12 to 36, with 65,536 features each,
+  released with their configs.</li>
+  <li><b>A catalog and a label for every feature that fires</b>: 519,383 features, each with its firing rate, its
+  strongest contexts and a kind.</li>
+  <li><b>A steering test of 170,437 features</b>, graded by Muse Spark 1.3, which shows where in the network
+  features steer.</li>
+  <li><b>Cross-layer links</b> from how features fire together, and threads that follow a concept from layer 12 to 36.</li>
+  <li><b>Character archetypes</b> as steering directions on every layer.</li>
+  <li><b>A public atlas</b> of the nine layers and <b>a live demo</b> that steers the full-precision 30B model.</li>
+</ul>
+<figure>
+<img src="fig-atlas.png" alt="The public atlas with nine layer maps stacked, deepest at the top, and the Ocean feature's thread running through eight of them, with its lineage listed on the right">
+<figcaption><b>Figure 1.</b> The public atlas at scope.kroonen.ai with the nine maps stacked (deepest at the top), showing
+the thread of feature 24544 of layer 24 (Table 3, Section 6). The atlas is described in Section 8. Blue: where the feature comes from. Red: what it turns into.</figcaption>
+</figure>
+
+<h2><span class="n">2</span>Model and setup</h2>
+<p>Muse Glimmer 30B (<code>MuseGlimmerForConditionalGeneration</code>, BF16) pairs a vision encoder with a dense text
+decoder. I use only the decoder: 52 layers, hidden size 6,656, MLP size 19,968, 32 attention heads that share 2 key-value
+heads (head size 128), a vocabulary of 202,048 tokens and a 131,072-token context.</p>
+<p>Each decoder layer returns the residual stream as a plain tensor, so a forward hook on
+<code>model.model.language_model.layers[i]</code> sees exactly what layer <i>i</i>+1 reads. Every SAE reads the residual
+stream after its layer. When only activations are needed, the forward pass stops at that layer, which skips the rest of the
+model. The nine layers are 12, 15, 18, 21, 24, 27, 30, 33 and 36: from 23% to 69% of the way through the network.</p>
+
+<h2><span class="n">3</span>Training the SAEs</h2>
+<p>The SAEs are TopK autoencoders in the style of Gao et al. [<a href="#r-gao">4</a>]. For an input <i>x</i>, the encoder
+computes pre-activations, keeps the <i>k</i> = 64 largest per token, and the decoder adds up the matching decoder rows:</p>
+<div class="eq">z = TopK<sub>64</sub>((s·x − b<sub>dec</sub>) W<sub>enc</sub> + b<sub>enc</sub>), &nbsp; x̂ = z W<sub>dec</sub> + b<sub>dec</sub></div>
+<p>with 65,536 latents and unit-norm decoder rows. The scale <i>s</i> is fixed per layer before training so that the
+scaled inputs have a mean squared norm equal to the hidden size (s = √(d / E‖x‖²)), and b<sub>dec</sub> starts at their
+mean. Latents that have not fired for 10 million tokens count as dead, and an auxiliary loss (AuxK) asks the top 512 dead
+latents to reconstruct the remaining error, with a weight of 1/32.</p>
+<p>The data is 70% web text from FineWeb-Edu [<a href="#r-fineweb">9</a>] and 30% conversations from UltraChat
+[<a href="#r-ultrachat">10</a>] rendered in Glimmer's own chat template, so assistant-side features (the reasoning
+channel, refusals, formatting) show up next to world knowledge. Documents are packed into 1,024-token rows, and the
+activations go through a shuffled buffer of 1,048,576 tokens in SAE batches of 4,096. Adam runs at a learning rate of
+2·10<sup>−4</sup> scaled by √(2<sup>14</sup>/2<sup>16</sup>), with 500 warmup steps and a linear decay over the last 20% of
+training. Seven layers trained on 100M tokens and layers 12 and 36 on 50M, one GPU per layer, on Modal (H200) and on an
+AWS g7e instance (one RTX PRO 6000, 96 GB). Because the forward pass stops at the layer, collection ran at
+9,649 to 39,718 tokens per second, and training all nine took 21.2 GPU hours.</p>
+
+<p class="tcap"><b>Table 1.</b> The nine SAEs. FVU is the fraction of variance unexplained, averaged over the last 20 logged
+steps. Dead latents had not fired in the last 10M training tokens. Fired counts the latents that fire at least once in the
+5M-token catalog (Section 4).</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Layer</th><th>Depth</th><th>Tokens</th><th>FVU</th><th>Variance explained</th><th>Dead at end</th><th>Fired in catalog</th><th>of 65,536</th></tr></thead>
+<tbody><tr><td>12</td><td>23%</td><td>50M</td><td>0.200</td><td>80.0%</td><td>0.48%</td><td>61,469</td><td>93.8%</td></tr><tr><td>15</td><td>29%</td><td>100M</td><td>0.227</td><td>77.3%</td><td>0.94%</td><td>60,441</td><td>92.2%</td></tr><tr><td>18</td><td>35%</td><td>100M</td><td>0.272</td><td>72.8%</td><td>0.91%</td><td>59,841</td><td>91.3%</td></tr><tr><td>21</td><td>40%</td><td>100M</td><td>0.300</td><td>70.0%</td><td>0.87%</td><td>59,492</td><td>90.8%</td></tr><tr><td>24</td><td>46%</td><td>100M</td><td>0.315</td><td>68.5%</td><td>0.98%</td><td>58,866</td><td>89.8%</td></tr><tr><td>27</td><td>52%</td><td>100M</td><td>0.308</td><td>69.2%</td><td>1.09%</td><td>57,699</td><td>88.0%</td></tr><tr><td>30</td><td>58%</td><td>100M</td><td>0.285</td><td>71.5%</td><td>1.35%</td><td>55,372</td><td>84.5%</td></tr><tr><td>33</td><td>63%</td><td>100M</td><td>0.239</td><td>76.1%</td><td>1.60%</td><td>54,343</td><td>82.9%</td></tr><tr><td>36</td><td>69%</td><td>50M</td><td>0.255</td><td>74.5%</td><td>1.72%</td><td>51,860</td><td>79.1%</td></tr></tbody>
+</table></div>
+<p>Reconstruction gets harder toward the middle of the network and easier again after it: FVU goes from 0.200 at
+layer 12 to 0.315 at layer 24, then back down to 0.239 at layer 33. At most
+1.72% of latents were dead at the end, on any layer. Layers 12 and 36 trained on half
+as many tokens, so their numbers are not strictly comparable with the rest.</p>
+
+<h2><span class="n">4</span>Catalog and labels</h2>
+<p>For every SAE I ran 5 million tokens from held-out shards of both datasets (512-token rows, 30% chat) and kept, for
+each latent, its firing rate, its mean activation and its 16 strongest contexts. Padding, row starts and attention-sink
+positions are masked out. Of the 589,824 latents across the nine SAEs, 519,383 (88.1%) fire at
+least once.</p>
+<p>Muse Spark 1.3 then named them from their 8 strongest contexts, through the Meta Model API, and gave each a kind,
+following the automated labeling approach of Bills et al. [<a href="#r-bills">13</a>]. 516,724 labels come from Spark. The other 2,659 features had contexts
+that would trip Meta's content filter, so a local model labeled them instead and those contexts were never sent to Spark.
+Figure 2 shows the kinds: 40.6% are concepts (a subject or a style), and 28.1%
+have no clear reading from their contexts.</p>
+<figure class="keep"><svg viewBox="0 0 720 128" role="img" aria-label="Kinds of the labeled features"><text class="lab" x="62" y="19" text-anchor="end">concept</text><rect class="mark" x="70" y="8" width="500.0" height="14" rx="3"><title>concept: 211,060 (40.6%)</title></rect><text class="val" x="578.0" y="19">211,060 (40.6%)</text><text class="lab" x="62" y="43" text-anchor="end">unclear</text><rect class="mark soft" x="70" y="32" width="346.3" height="14" rx="3"><title>unclear: 146,196 (28.1%)</title></rect><text class="val" x="424.3" y="43">146,196 (28.1%)</text><text class="lab" x="62" y="67" text-anchor="end">token</text><rect class="mark soft" x="70" y="56" width="158.6" height="14" rx="3"><title>token: 66,952 (12.9%)</title></rect><text class="val" x="236.6" y="67">66,952 (12.9%)</text><text class="lab" x="62" y="91" text-anchor="end">format</text><rect class="mark soft" x="70" y="80" width="118.2" height="14" rx="3"><title>format: 49,888 (9.6%)</title></rect><text class="val" x="196.2" y="91">49,888 (9.6%)</text><text class="lab" x="62" y="115" text-anchor="end">syntax</text><rect class="mark soft" x="70" y="104" width="107.3" height="14" rx="3"><title>syntax: 45,285 (8.7%)</title></rect><text class="val" x="185.3" y="115">45,285 (8.7%)</text></svg>
+<figcaption><b>Figure 2.</b> Kinds of the 519,383 labeled features, as Muse Spark assigned them (two features have other
+kinds). Concepts are subjects and styles, tokens are features for one token or word piece, format covers markup and
+layout, syntax covers grammatical roles.</figcaption></figure>
+
+<h2><span class="n">5</span>Steering tests</h2>
+<p>A feature's steering test adds its decoder direction to the residual stream after its layer, at four strengths given
+as fractions of the layer's median residual norm, all below the full norm, where most directions wreck the text. Glimmer
+answers the same four neutral prompts (for example "Describe your ideal weekend.") with greedy decoding, starting in
+its user-facing channel so the token budget goes to visible text. Muse Spark compares each steered answer with the
+unsteered one and rates, per strength, how clearly the feature's theme shows (concept, 0 to 3) and how readable the text
+stays (fluency, 0 to 3). A feature's score is its best concept × fluency / 9. I call a feature <i>clean</i> when it reaches
+1 (theme dominant, text fully fluent) and <i>partly</i> steerable at 2/3 or more. Spark also says what the steering did,
+which does not always match the label.</p>
+<p>The tests cover the features most likely to steer on each layer, so the shares below are shares of tested features,
+not of all features. In total 170,437 features were tested. Spark graded 155,666 of them, and
+14,771 more were graded by a local model because their requests would trip Meta's content filter. Only Spark's
+grades are counted below, so the layers compare on one judge.</p>
+<figure class="keep"><svg viewBox="0 0 720 196" role="img" aria-label="Share of tested features that steer cleanly, per layer"><line class="grid" x1="40" x2="710" y1="164.0" y2="164.0"/><text class="tick" x="34" y="167.5" text-anchor="end">0%</text><line class="grid" x1="40" x2="710" y1="116.0" y2="116.0"/><text class="tick" x="34" y="119.5" text-anchor="end">4%</text><line class="grid" x1="40" x2="710" y1="68.0" y2="68.0"/><text class="tick" x="34" y="71.5" text-anchor="end">8%</text><line class="grid" x1="40" x2="710" y1="20.0" y2="20.0"/><text class="tick" x="34" y="23.5" text-anchor="end">12%</text><path class="mark soft" d="M56.4,164.0V116.1Q56.4,113.1 59.4,113.1H95.1Q98.1,113.1 98.1,116.1V164.0Z"><title>Layer 12: 4.2% of 17,531 Spark-graded features steer cleanly (743)</title></path><text class="val" x="77.2" y="107.1" text-anchor="middle">4.2%</text><text class="tick" x="77.2" y="180.0" text-anchor="middle">12</text><path class="mark soft" d="M130.8,164.0V137.2Q130.8,134.2 133.8,134.2H169.5Q172.5,134.2 172.5,137.2V164.0Z"><title>Layer 15: 2.5% of 21,217 Spark-graded features steer cleanly (527)</title></path><text class="val" x="151.7" y="128.2" text-anchor="middle">2.5%</text><text class="tick" x="151.7" y="180.0" text-anchor="middle">15</text><path class="mark soft" d="M205.3,164.0V131.5Q205.3,128.5 208.3,128.5H244.0Q247.0,128.5 247.0,131.5V164.0Z"><title>Layer 18: 3.0% of 27,110 Spark-graded features steer cleanly (803)</title></path><text class="val" x="226.1" y="122.5" text-anchor="middle">3.0%</text><text class="tick" x="226.1" y="180.0" text-anchor="middle">18</text><path class="mark" d="M279.7,164.0V30.6Q279.7,27.6 282.7,27.6H318.4Q321.4,27.6 321.4,30.6V164.0Z"><title>Layer 21: 11.4% of 24,565 Spark-graded features steer cleanly (2,792)</title></path><text class="val" x="300.6" y="21.6" text-anchor="middle">11.4%</text><text class="tick" x="300.6" y="180.0" text-anchor="middle">21</text><path class="mark" d="M354.2,164.0V41.6Q354.2,38.6 357.2,38.6H392.8Q395.8,38.6 395.8,41.6V164.0Z"><title>Layer 24: 10.5% of 10,622 Spark-graded features steer cleanly (1,110)</title></path><text class="val" x="375.0" y="32.6" text-anchor="middle">10.5%</text><text class="tick" x="375.0" y="180.0" text-anchor="middle">24</text><path class="mark" d="M428.6,164.0V50.0Q428.6,47.0 431.6,47.0H467.3Q470.3,47.0 470.3,50.0V164.0Z"><title>Layer 27: 9.7% of 19,193 Spark-graded features steer cleanly (1,871)</title></path><text class="val" x="449.4" y="41.0" text-anchor="middle">9.7%</text><text class="tick" x="449.4" y="180.0" text-anchor="middle">27</text><path class="mark soft" d="M503.0,164.0V116.7Q503.0,113.7 506.0,113.7H541.7Q544.7,113.7 544.7,116.7V164.0Z"><title>Layer 30: 4.2% of 12,826 Spark-graded features steer cleanly (538)</title></path><text class="val" x="523.9" y="107.7" text-anchor="middle">4.2%</text><text class="tick" x="523.9" y="180.0" text-anchor="middle">30</text><path class="mark soft" d="M577.5,164.0V149.4Q577.5,146.4 580.5,146.4H616.2Q619.2,146.4 619.2,149.4V164.0Z"><title>Layer 33: 1.5% of 10,624 Spark-graded features steer cleanly (156)</title></path><text class="val" x="598.3" y="140.4" text-anchor="middle">1.5%</text><text class="tick" x="598.3" y="180.0" text-anchor="middle">33</text><path class="mark soft" d="M651.9,164.0V153.5Q651.9,150.5 654.9,150.5H690.6Q693.6,150.5 693.6,153.5V164.0Z"><title>Layer 36: 1.1% of 11,978 Spark-graded features steer cleanly (135)</title></path><text class="val" x="672.8" y="144.5" text-anchor="middle">1.1%</text><text class="tick" x="672.8" y="180.0" text-anchor="middle">36</text><line class="axis" x1="40" x2="710" y1="164" y2="164"/><text class="tick" x="375.0" y="193" text-anchor="middle">layer</text></svg>
+<figcaption><b>Figure 3.</b> Share of tested features that steer cleanly, per layer, by Muse Spark's grades. The middle
+layers, 21 to 27, stand out.</figcaption></figure>
+<p class="tcap"><b>Table 2.</b> Steering tests per layer. Clean counts features with the top grade from Spark. The last
+column counts character archetypes (Section 7) that a direction plays cleanly.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Layer</th><th>Features tested</th><th>Graded by Spark</th><th>Clean</th><th>Share clean</th><th>Archetypes</th></tr></thead>
+<tbody><tr><td>12</td><td>17,531</td><td>17,531</td><td>743</td><td><b>4.2%</b></td><td>9 of 28</td></tr><tr><td>15</td><td>24,446</td><td>21,217</td><td>527</td><td><b>2.5%</b></td><td>6 of 28</td></tr><tr><td>18</td><td>29,167</td><td>27,110</td><td>803</td><td><b>3.0%</b></td><td>12 of 28</td></tr><tr class=hl><td>21</td><td>27,954</td><td>24,565</td><td>2,792</td><td><b>11.4%</b></td><td>12 of 28</td></tr><tr class=hl><td>24</td><td>10,622</td><td>10,622</td><td>1,110</td><td><b>10.5%</b></td><td>19 of 28</td></tr><tr class=hl><td>27</td><td>21,991</td><td>19,193</td><td>1,871</td><td><b>9.7%</b></td><td>8 of 28</td></tr><tr><td>30</td><td>14,426</td><td>12,826</td><td>538</td><td><b>4.2%</b></td><td>9 of 28</td></tr><tr><td>33</td><td>12,322</td><td>10,624</td><td>156</td><td><b>1.5%</b></td><td>6 of 28</td></tr><tr><td>36</td><td>11,978</td><td>11,978</td><td>135</td><td><b>1.1%</b></td><td>8 of 28</td></tr><tr class=total><td>all</td><td>170,437</td><td>155,666</td><td>8,675</td><td><b>5.6%</b></td><td></td></tr></tbody>
+</table></div>
+<p>Steering peaks in the middle of the network. At layers 21, 24 and 27, 9.7% to 11.4% of tested features
+steer cleanly; at the other layers it is 1.1% to 4.2%, and it is lowest at the deep end
+(1.5% at layer 33, 1.1% at layer 36). Across all layers, 8,675 features
+(5.6% of those Spark graded) steer cleanly by Spark's grades. Counting both judges,
+10,929 steer cleanly and 41,727 partly.</p>
+
+<h2><span class="n">6</span>Cross-layer links and threads</h2>
+<p>To relate features on neighboring layers, one forward pass captures the residual stream after each SAE's layer, each
+SAE encodes its own layer, and for every pair of neighboring layers the products of activations are summed per (lower,
+upper) feature pair over the same tokens. The similarity of two features is the cosine of their activation patterns,</p>
+<div class="eq">sim(a, b) = Σ<sub>t</sub> a<sub>t</sub> b<sub>t</sub> / √(Σ<sub>t</sub> a<sub>t</sub>² · Σ<sub>t</sub> b<sub>t</sub>²)</div>
+<p>which is 1 when they fire on exactly the same tokens in proportion. I ran it over 5,002,394 tokens and kept
+each feature's 8 best partners one layer up (what it turns into) and one layer down (where it comes from). This is a
+correlational cousin of crosscoders [<a href="#r-crosscoders">7</a>]: it needs no extra training, only the nine SAEs.</p>
+<p>A feature's <i>thread</i> follows its strongest partner up and down while the similarity stays at 0.3 or more, and its
+span is the number of layers the thread covers. Figure 4 shows the spans of all 519,383 features.</p>
+<figure class="keep"><svg viewBox="0 0 720 186" role="img" aria-label="How many layers each feature's thread covers"><line class="grid" x1="52" x2="710" y1="154.0" y2="154.0"/><text class="tick" x="46" y="157.5" text-anchor="end">0k</text><line class="grid" x1="52" x2="710" y1="127.2" y2="127.2"/><text class="tick" x="46" y="130.7" text-anchor="end">50k</text><line class="grid" x1="52" x2="710" y1="100.4" y2="100.4"/><text class="tick" x="46" y="103.9" text-anchor="end">100k</text><line class="grid" x1="52" x2="710" y1="73.6" y2="73.6"/><text class="tick" x="46" y="77.1" text-anchor="end">150k</text><line class="grid" x1="52" x2="710" y1="46.8" y2="46.8"/><text class="tick" x="46" y="50.3" text-anchor="end">200k</text><line class="grid" x1="52" x2="710" y1="20.0" y2="20.0"/><text class="tick" x="46" y="23.5" text-anchor="end">250k</text><path class="mark" d="M68.1,154.0V71.9Q68.1,68.9 71.1,68.9H106.0Q109.0,68.9 109.0,71.9V154.0Z"><title>1 layer: 158,789 features (30.6%)</title></path><text class="val" x="88.6" y="62.9" text-anchor="middle">31%</text><text class="tick" x="88.6" y="170.0" text-anchor="middle">1</text><path class="mark soft" d="M141.2,154.0V145.9Q141.2,142.9 144.2,142.9H179.1Q182.1,142.9 182.1,145.9V154.0Z"><title>2 layers: 20,772 features (4.0%)</title></path><text class="val" x="161.7" y="136.9" text-anchor="middle">4.0%</text><text class="tick" x="161.7" y="170.0" text-anchor="middle">2</text><path class="mark soft" d="M214.3,154.0V149.9Q214.3,146.9 217.3,146.9H252.2Q255.2,146.9 255.2,149.9V154.0Z"><title>3 layers: 13,299 features (2.6%)</title></path><text class="val" x="234.8" y="140.9" text-anchor="middle">2.6%</text><text class="tick" x="234.8" y="170.0" text-anchor="middle">3</text><path class="mark soft" d="M287.4,154.0V149.8Q287.4,146.8 290.4,146.8H325.4Q328.4,146.8 328.4,149.8V154.0Z"><title>4 layers: 13,417 features (2.6%)</title></path><text class="val" x="307.9" y="140.8" text-anchor="middle">2.6%</text><text class="tick" x="307.9" y="170.0" text-anchor="middle">4</text><path class="mark soft" d="M360.5,154.0V147.3Q360.5,144.3 363.5,144.3H398.5Q401.5,144.3 401.5,147.3V154.0Z"><title>5 layers: 18,090 features (3.5%)</title></path><text class="val" x="381.0" y="138.3" text-anchor="middle">3.5%</text><text class="tick" x="381.0" y="170.0" text-anchor="middle">5</text><path class="mark soft" d="M433.6,154.0V145.2Q433.6,142.2 436.6,142.2H471.6Q474.6,142.2 474.6,145.2V154.0Z"><title>6 layers: 21,970 features (4.2%)</title></path><text class="val" x="454.1" y="136.2" text-anchor="middle">4.2%</text><text class="tick" x="454.1" y="170.0" text-anchor="middle">6</text><path class="mark soft" d="M506.8,154.0V146.4Q506.8,143.4 509.8,143.4H544.7Q547.7,143.4 547.7,146.4V154.0Z"><title>7 layers: 19,752 features (3.8%)</title></path><text class="val" x="527.2" y="137.4" text-anchor="middle">3.8%</text><text class="tick" x="527.2" y="170.0" text-anchor="middle">7</text><path class="mark soft" d="M579.9,154.0V141.8Q579.9,138.8 582.9,138.8H617.8Q620.8,138.8 620.8,141.8V154.0Z"><title>8 layers: 28,358 features (5.5%)</title></path><text class="val" x="600.3" y="132.8" text-anchor="middle">5.5%</text><text class="tick" x="600.3" y="170.0" text-anchor="middle">8</text><path class="mark" d="M653.0,154.0V36.4Q653.0,33.4 656.0,33.4H690.9Q693.9,33.4 693.9,36.4V154.0Z"><title>9 layers: 224,936 features (43.3%)</title></path><text class="val" x="673.4" y="27.4" text-anchor="middle">43%</text><text class="tick" x="673.4" y="170.0" text-anchor="middle">9</text><line class="axis" x1="52" x2="710" y1="154" y2="154"/><text class="tick" x="381.0" y="183" text-anchor="middle">layers a feature's thread covers</text></svg>
+<figcaption><b>Figure 4.</b> How many of the nine layers each feature's thread covers. The two ends dominate: threads
+through all nine layers (43.3% of features) and features that live on one layer only (30.6%).</figcaption></figure>
+<p>There is a stable backbone. 43.3% of features belong to a thread that runs through all nine layers. Shallow
+layers keep their concepts: 62.3% of layer 12's features run all the way to layer 36. Deep layers add
+their own: 48.8% of layer 36's features exist on that layer only, against 15.0% at
+layer 12. Besides the strongest partner, the atlas also shows other partners above the threshold, which is where threads
+split and merge.</p>
+<p class="tcap"><b>Table 3.</b> One thread: the strongest-partner chain from feature 24544 of layer 24 (the Ocean feature).
+Similarity is to the next feature toward layer 24. Labels are Muse Spark's. The thread stops at layer 15, where its strongest partner on
+layer 12 falls below 0.3.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Layer</th><th>Feature</th><th class="l">Label</th><th>Similarity</th></tr></thead>
+<tbody><tr><td>36</td><td>#22854</td><td class=l>coral reef habitat descriptions</td><td>0.57</td></tr><tr><td>33</td><td>#38946</td><td class=l>coral bleaching and reefs</td><td>0.70</td></tr><tr><td>30</td><td>#65009</td><td class=l>coral bleaching and coral reefs</td><td>0.56</td></tr><tr><td>27</td><td>#58953</td><td class=l>marine copepod ecology research papers</td><td>0.75</td></tr><tr class=hl><td>24</td><td>#24544</td><td class=l>marine ocean and underwater environments</td><td></td></tr><tr><td>21</td><td>#3335</td><td class=l>scuba diving marine life</td><td>0.61</td></tr><tr><td>18</td><td>#56835</td><td class=l>scuba diving underwater photography</td><td>0.84</td></tr><tr><td>15</td><td>#63964</td><td class=l>Scuba diving locations and terms</td><td>0.45</td></tr></tbody>
+</table></div>
+<p>Read from the bottom, the concept moves from diving as an activity (layers 15 to 21) to the ocean as a place (layer
+24) to marine science and coral reefs (layers 27 to 36).</p>
+
+<h2><span class="n">7</span>Character archetypes</h2>
+<p>Single features rarely carry a whole character, so for 28 archetypes, from pirate captain to stoic philosopher, I
+looked for directions directly. Each archetype comes with user messages that suit it, and every message gets two replies,
+one in the archetype's voice and one plain, from the same writer so the writer's own style cancels out. Glimmer then reads
+both replies with no persona instruction, so a feature that fires more on the archetype side does so because of the reply
+itself. Features are ranked by their mean paired difference times how consistently the archetype side wins, on two thirds
+of the pairs; the last third is held out.</p>
+<p>Three kinds of direction come out of it: each top feature alone, a blend of the top features weighted by their
+difference, and the plain difference of mean residuals (contrastive activation addition [<a href="#r-caa">8</a>]), the
+baseline the SAE has to beat. Spark judges them on prompts that suit the archetype. Layer 24 is the best layer for
+characters: 19 of 28 play cleanly there by Spark's grades (Table 2), for example the pirate
+captain, the noir detective, the stoic philosopher and the hype coach. Of those 19, a single SAE feature plays 9 cleanly,
+a blend 5, and the mean-difference vector 13 (an archetype can count more than once).</p>
+
+<h2><span class="n">8</span>The atlas and the live demo</h2>
+<p>Each layer's map places every fired feature by its decoder direction: the directions are unit-normalized and laid out
+in 2D with UMAP [<a href="#r-umap">11</a>] under cosine distance, so features that write similar things into the residual
+stream sit together. K-means on a 10-dimensional UMAP of the same neighbors splits each map into 200 regions, which Muse
+Spark names from their members' labels. The nine maps are then lined up by similarity transforms (rotation or mirror,
+scale and shift, fitted by Procrustes [<a href="#r-procrustes">12</a>]) on mutual best partners with a similarity of 0.3
+or more, chained outward from the middle layer, so a subject sits in about the same place on every layer.</p>
+<p>The public atlas runs on Cloudflare: one Worker, the maps in R2 and full-text search over the labels in D1. It carries
+only positions, kinds, regions, labels and links between layers, with no vectors and no steering results, and it shows
+506,397 features (Section 9).</p>
+<p>The live demo, a Hugging Face Space on ZeroGPU, runs the full-precision BF16 model. It offers 20 dials on harmless
+subjects (15 single SAE features and 5 character directions, from layers 24 and 36), each of which passed Spark's steering
+test with the top grade. Every question is answered twice in the same batch with greedy decoding, once plain and once
+steered, so the steering is the only difference between the two answers.</p>
+
+<h2><span class="n">9</span>Safety</h2>
+<p class="warn"><b>Content warning.</b> These SAEs were trained on ordinary web and chat text. Like any SAE on a large
+language model, they contain features for violent, sexual, hateful and otherwise disturbing subjects, and steering with
+them can produce upsetting text.</p>
+<p>Some findings could be upsetting, so the public material filters them. The public atlas leaves out 12,986 features on
+upsetting topics entirely: not only their labels but their place on the map, their share of a region and every link to
+them from the layers next to them, so nothing marks which feature ids they are. The keyword patterns that select them,
+and that screened requests to Spark, stay private. Requests that would trip Meta's content filter were never sent to
+Spark; those features were labeled and graded by a local model. The released SAEs contain weights and configs only, with no
+labels, activation data or steering results.</p>
+
+<h2><span class="n">10</span>Limitations</h2>
+<ul>
+  <li><b>The judge is a language model.</b> Muse Spark's concept and fluency grades are not human ratings, and a second
+  judge (the local model) grades more generously, which is why the shares count Spark only.</li>
+  <li><b>Labels come from top contexts.</b> A label describes where a feature fires hardest, which can miss what it does
+  at weaker activations. 28.1% of features have no clear label.</li>
+  <li><b>One run per layer.</b> Every SAE uses one seed and one size, and layers 12 and 36 trained on half the tokens.</li>
+  <li><b>A 5M-token catalog.</b> Rare features are under-sampled, and latents that never fire in it are left out of the
+  labels and the atlas.</li>
+  <li><b>Narrow steering tests.</b> Four neutral prompts, greedy decoding and four strengths per feature, and the tested
+  features are not a random sample.</li>
+  <li><b>Threads are correlational.</b> Co-firing says two features fire on the same tokens, not that one computes the
+  other, and the 0.3 threshold is a choice.</li>
+</ul>
+
+<h2><span class="n">11</span>Reproducibility</h2>
+<p>Every step is a function in <code>modal_app.py</code> and runs on Modal, or on any machine with one 96 GB GPU through
+<code>scripts/run_here.py</code>:</p>
+<pre><code>modal run modal_app.py::train --layer 24
+python scripts/run_here.py catalog --run layer24-64k-k64
+python scripts/run_here.py label --run layer24-64k-k64 --everything
+python scripts/run_here.py sweep --run layer24-64k-k64 --n-features 30000
+python scripts/run_here.py crosslayer --runs layer21-64k-k64,layer24-64k-k64</code></pre>
+<p>Loading a released SAE and reading a layer with it:</p>
+<pre><code>from pathlib import Path
+from huggingface_hub import hf_hub_download
+from scope.sae import TopKSAE
+
+repo = "kroonen-ai/glimmer-scope-saes"
+hf_hub_download(repo, "layer-24/cfg.json")
+sae = TopKSAE.load(Path(hf_hub_download(repo, "layer-24/sae.safetensors")).parent)
+values, features = sae.encode(resid * sae.cfg.input_scale)   # resid: [tokens, 6656]</code></pre>
+<p class="note">Compute came from Modal and AWS. Labels, judging and region names used Muse Spark 1.3 through the Meta
+Model API.</p>
+
+<h2><span class="n">12</span>References</h2>
+<ol class="refs">
+  <li id="r-bricken">Bricken, T., Templeton, A., Batson, J., et al. (2023). Towards Monosemanticity: Decomposing Language Models With Dictionary Learning. <i>Transformer Circuits Thread</i>.</li>
+  <li id="r-cunningham">Cunningham, H., Ewart, A., Riggs, L., Huben, R., Sharkey, L. (2023). Sparse Autoencoders Find Highly Interpretable Features in Language Models. arXiv:2309.08600.</li>
+  <li id="r-templeton">Templeton, A., Conerly, T., Marcus, J., et al. (2024). Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet. <i>Transformer Circuits Thread</i>.</li>
+  <li id="r-gao">Gao, L., Dupré la Tour, T., Tillman, H., et al. (2024). Scaling and evaluating sparse autoencoders. arXiv:2406.04093.</li>
+  <li id="r-gemmascope">Lieberum, T., Rajamanoharan, S., Conmy, A., et al. (2024). Gemma Scope: Open Sparse Autoencoders Everywhere All At Once on Gemma 2. arXiv:2408.05147.</li>
+  <li id="r-turner">Turner, A. M., Thiergart, L., Udell, D., et al. (2023). Activation Addition: Steering Language Models Without Optimization. arXiv:2308.10248.</li>
+  <li id="r-crosscoders">Lindsey, J., Templeton, A., Marcus, J., et al. (2024). Sparse Crosscoders for Cross-Layer Features and Model Diffing. <i>Transformer Circuits Thread</i>.</li>
+  <li id="r-caa">Rimsky, N., Gabrieli, N., Schulz, J., et al. (2024). Steering Llama 2 via Contrastive Activation Addition. <i>ACL 2024</i>. arXiv:2312.06681.</li>
+  <li id="r-fineweb">Penedo, G., Kydlíček, H., Ben Allal, L., et al. (2024). The FineWeb Datasets: Decanting the Web for the Finest Text Data at Scale. arXiv:2406.17557.</li>
+  <li id="r-ultrachat">Ding, N., Chen, Y., Xu, B., et al. (2023). Enhancing Chat Language Models by Scaling High-quality Instructional Conversations. <i>EMNLP 2023</i>. arXiv:2305.14233.</li>
+  <li id="r-umap">McInnes, L., Healy, J., Melville, J. (2018). UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction. arXiv:1802.03426.</li>
+  <li id="r-procrustes">Schönemann, P. H. (1966). A generalized solution of the orthogonal Procrustes problem. <i>Psychometrika</i>, 31(1), 1 to 10.</li>
+  <li id="r-bills">Bills, S., Cammarata, N., Mossing, D., et al. (2023). Language models can explain neurons in language models. OpenAI.</li>
+</ol>
+</main>
+</body>
+</html>
