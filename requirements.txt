@@ -1,0 +1,13 @@
+torch>=2.8
+transformers==5.21.0
+accelerate
+datasets
+safetensors
+huggingface_hub[hf_transfer]
+numpy
+modal
+# maps and atlas
+umap-learn
+scikit-learn
+# tests
+pytest

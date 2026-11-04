@@ -7,4 +7,10 @@ results/
 
 # wrangler dev state
 .wrangler/
+
+# the private safety patterns (GLIMMER_SAFETY_PATTERNS), never committed
 private/
+*safety-patterns*.json
+
+# macOS
+.DS_Store
