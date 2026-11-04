@@ -11,6 +11,8 @@ import random
 SPACE = "https://huggingface.co/spaces/rob-x-ai/glimmer-scope"
 CODE = "https://github.com/kroonen-ai/glimmer-scope"
 SAES = "https://huggingface.co/kroonen-ai/glimmer-scope-saes"
+VIDEO_ID = "6krusrrYQls"
+VIDEO = f"https://youtu.be/{VIDEO_ID}"
 SITE = "https://scope.kroonen.ai"
 KINDS = ("concept", "syntax", "token", "format", "unclear")
 PER_LAYER = 800
@@ -164,7 +166,7 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
   <div class="wrap top-in">
     {brand_html}
     <nav class="nav" aria-label="Glimmer Scope">
-      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a>
+      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a><a href="#watch">Video</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a>
     </nav>
     <span class="toggles">{theme_toggle}</span>
   </div>
@@ -181,7 +183,7 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
         <a class="btn primary" href="{SPACE}" {ext}>Try it live <span aria-hidden="true">↗</span></a>
         <a class="btn" href="/atlas/">Explore the atlas</a>
       </div>
-      <p class="more">{report_link}<a class="text-link" href="{CODE}" {ext}>Code on GitHub</a><a class="text-link" href="{SAES}" {ext}>The 9 SAEs</a></p>
+      <p class="more">{report_link}<a class="text-link" href="{CODE}" {ext}>Code on GitHub</a><a class="text-link" href="{SAES}" {ext}>The 9 SAEs</a><a class="text-link" href="#watch">Watch the video</a></p>
     </div>
     <figure class="hero-fig">
       <canvas id="stack" role="img" aria-label="Nine layers of Muse Glimmer 30B stacked, deepest at the top, with sampled features on each and one feature's thread running through them"></canvas>
@@ -192,6 +194,25 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
 
 <section class="readout" aria-label="The work in numbers">
   <div class="wrap readout-in">{readout_html}</div>
+</section>
+
+<section class="sec" id="watch">
+  <div class="wrap two watch">
+    <div>
+      <p class="eyebrow">Watch</p>
+      <h2>Two minutes inside Glimmer.</h2>
+      <p>The atlas, Muse Spark naming a feature live through the Meta Model API, and Glimmer steered toward the ocean
+        and a pirate captain, next to the answer it gives without the dials.</p>
+      <p class="more"><a class="text-link" href="{VIDEO}" {ext}>Watch on YouTube</a></p>
+    </div>
+    <div class="video" id="video" data-id="{VIDEO_ID}">
+      <button class="video-play" type="button" aria-label="Play the video: Glimmer Scope, steering Muse Glimmer 30B from the inside">
+        <img src="/img/video-poster.jpg" alt="" width="1280" height="720" loading="lazy">
+        <span class="play" aria-hidden="true"></span>
+        <span class="dur" aria-hidden="true">2:14</span>
+      </button>
+    </div>
+  </div>
 </section>
 
 <section class="sec" id="found">
@@ -278,7 +299,7 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
   <div class="wrap foot-in">
     <span>Glimmer Scope by Kroonen AI · Apache 2.0</span>
     <nav aria-label="Everything Glimmer Scope">
-      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a><a href="https://huggingface.co/collections/kroonen-ai/glimmer-scope" {ext}>HF collection</a><a href="https://kroonen.ai" {ext}>kroonen.ai</a>
+      <a href="/atlas/">Atlas</a><a href="{SPACE}" {ext}>Live demo</a><a href="#watch">Video</a>{report_nav}<a href="{CODE}" {ext}>Code</a><a href="{SAES}" {ext}>SAEs</a><a href="https://huggingface.co/collections/kroonen-ai/glimmer-scope" {ext}>HF collection</a><a href="https://kroonen.ai" {ext}>kroonen.ai</a>
     </nav>
   </div>
 </footer>
@@ -290,6 +311,16 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
   if (qs.has("og")) document.documentElement.classList.add("og");
   glimmerStack(document.getElementById("stack"), JSON.parse(document.getElementById("stack-data").textContent),
                {{ still: qs.has("still") || qs.has("og") }});
+  // the YouTube player loads only when someone presses play
+  const video = document.getElementById("video");
+  video.querySelector("button").addEventListener("click", () => {{
+    const f = document.createElement("iframe");
+    f.src = `https://www.youtube-nocookie.com/embed/${{video.dataset.id}}?autoplay=1&rel=0`;
+    f.title = "Glimmer Scope: steering Muse Glimmer 30B from the inside";
+    f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    f.allowFullscreen = true;
+    video.replaceChildren(f);
+  }});
 </script>
 </body>
 </html>
@@ -403,6 +434,24 @@ h3 { font-size: 19px; letter-spacing: -0.015em; font-weight: 640; margin: 28px 0
 .chart .val { font: 600 12px var(--font); fill: var(--ink); font-variant-numeric: tabular-nums; }
 .chart .hit { fill: transparent; }
 .chart .row:hover .bar { fill: var(--accent-hover); }
+
+/* the video: a poster first, the player only after a click */
+.watch { align-items: center; }
+.video { position: relative; aspect-ratio: 16 / 9; border-radius: 20px; overflow: hidden; border: 1px solid var(--line);
+  background: #0b1118; box-shadow: var(--shadow); }
+.video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-play { position: absolute; inset: 0; padding: 0; border: 0; background: none; cursor: pointer; display: block; }
+.video-play img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
+.video-play:hover img { transform: scale(1.015); }
+.play { position: absolute; left: 80%; top: 52%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 10px 34px rgba(0, 0, 0, 0.35); transition: transform .2s ease; }
+@media (max-width: 560px) { .play { width: 58px; height: 58px; margin: -29px 0 0 -29px; } .play::after { left: 23px !important; top: 17px !important; border-width: 12px 0 12px 18px !important; } }
+.play::after { content: ""; position: absolute; left: 31px; top: 24px; border-style: solid; border-width: 14px 0 14px 22px;
+  border-color: transparent transparent transparent #fff; }
+.video-play:hover .play, .video-play:focus-visible .play { transform: scale(1.08); }
+.dur { position: absolute; right: 14px; bottom: 12px; padding: 3px 8px; border-radius: 8px; font: 500 12px var(--mono);
+  color: #fff; background: rgba(0, 0, 0, 0.6); }
+@media (prefers-reduced-motion: reduce) { .video-play img, .play { transition: none; } .video-play:hover img { transform: none; } }
 
 /* cards */
 .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin-top: 28px; }

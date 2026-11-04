@@ -4,6 +4,7 @@ Looking inside Muse Glimmer 30B: sparse autoencoders on nine of its layers, ever
 labeled, tested for steering, and followed from layer to layer.
 
 **[Try it live on Hugging Face](https://huggingface.co/spaces/rob-x-ai/glimmer-scope)** ·
+**[Watch the video](https://youtu.be/6krusrrYQls)** ·
 **[Explore the atlas](https://scope.kroonen.ai/atlas)** ·
 **[Read the report](https://scope.kroonen.ai/paper)** ([PDF](paper/glimmer-scope-report.pdf)) ·
 [the 9 SAEs](https://huggingface.co/kroonen-ai/glimmer-scope-saes) ·
