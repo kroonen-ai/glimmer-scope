@@ -9,6 +9,8 @@ labeled, tested for steering, and followed from layer to layer.
 [the 9 SAEs](https://huggingface.co/kroonen-ai/glimmer-scope-saes) ·
 [Muse Glimmer 30B](https://huggingface.co/meta-models/Muse-Glimmer-30B)
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23952447.svg)](https://doi.org/10.5281/zenodo.23952447)
+
 ![Nine maps of Glimmer's features stacked in perspective, one per layer from 12 to 36, with one feature's thread running through all of them](site/atlas-stack-light.jpg)
 
 A sparse autoencoder (SAE) splits what a layer of the model computes into tens of thousands of
@@ -146,6 +148,23 @@ kept and graded separately.
 
 [Muse Glimmer 30B](https://huggingface.co/meta-models/Muse-Glimmer-30B) (open weights) and Muse Spark 1.3 through the
 Meta Model API, for the Meta AI hackathon. Compute from Modal and AWS.
+
+## Citation
+
+The technical report is archived on Zenodo: [doi:10.5281/zenodo.23952447](https://doi.org/10.5281/zenodo.23952447).
+
+```bibtex
+@misc{kroonen2026glimmerscope,
+  author    = {Kroonen, Robin},
+  title     = {Glimmer Scope: sparse autoencoders on nine layers of Muse Glimmer 30B},
+  year      = {2026},
+  month     = nov,
+  publisher = {Zenodo},
+  note      = {Preprint},
+  doi       = {10.5281/zenodo.23952447},
+  url       = {https://doi.org/10.5281/zenodo.23952447}
+}
+```
 
 ## License
 

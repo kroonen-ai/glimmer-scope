@@ -103,7 +103,8 @@ def home_html(stats: list[dict], data: dict, brand_html: str, theme_early: str, 
                f"to {esc(last['label'].lower())} at layer {last['layer']}.")
     ext = 'target="_blank" rel="noopener"'
     report_nav = '<a href="/paper/">Report</a>' if has_paper else ""
-    report_link = '<a class="text-link" href="/paper/">Read the report</a>' if has_paper else ""
+    report_link = ('<a class="text-link" href="/paper/">Read the report</a>'
+                   f'<a class="text-link" href="https://doi.org/10.5281/zenodo.23952447" {ext}>DOI 10.5281/zenodo.23952447</a>') if has_paper else ""
     readout = [("Model", "Muse Glimmer 30B"), ("Sparse autoencoders", "9, layers 12 to 36"),
                ("Features per layer", "65,536"), ("Labeled by Muse Spark", f"{labeled:,}"),
                ("Steering tests", "170,000+"), ("Through all nine layers", "43%")]

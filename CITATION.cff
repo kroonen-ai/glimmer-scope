@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use Glimmer Scope, please cite the technical report."
+title: "Glimmer Scope"
+authors:
+  - family-names: Kroonen
+    given-names: Robin
+    affiliation: Kroonen AI
+    orcid: "https://orcid.org/0009-0004-7796-5617"
+repository-code: "https://github.com/kroonen-ai/glimmer-scope"
+url: "https://scope.kroonen.ai"
+license: Apache-2.0
+preferred-citation:
+  type: report
+  title: "Glimmer Scope: sparse autoencoders on nine layers of Muse Glimmer 30B"
+  authors:
+    - family-names: Kroonen
+      given-names: Robin
+      affiliation: Kroonen AI
+      orcid: "https://orcid.org/0009-0004-7796-5617"
+  year: 2026
+  month: 11
+  publisher:
+    name: Zenodo
+  doi: "10.5281/zenodo.23952447"
+  url: "https://doi.org/10.5281/zenodo.23952447"
