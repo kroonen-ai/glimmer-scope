@@ -87,9 +87,17 @@ tr.total td { border-top: 1px solid var(--line); font-weight: 600; border-bottom
   .tick, .val { font-size: 10px; } .lab { font-size: 11px; }
   .keep { break-inside: avoid; }
 }
+.sitebar { position: sticky; top: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 10px 16px;
+  flex-wrap: wrap; padding: 10px 20px; font-size: 13.5px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); }
+.sitebar a { text-decoration: none; } .sitebar .home { color: var(--ink); font-weight: 600; }
+.sitebar nav { display: flex; gap: 6px 16px; flex-wrap: wrap; } .sitebar nav a { color: var(--muted); }
+.sitebar nav a:hover { color: var(--accent-ink); } .sitebar nav a.pdf { color: var(--accent-ink); font-weight: 600; }
+@media print { .sitebar { display: none; } }
 </style>
 </head>
 <body>
+<div class="sitebar"><a class="home" href="https://scope.kroonen.ai/">Glimmer Scope</a><nav><a href="https://scope.kroonen.ai/atlas/">Atlas</a><a href="https://huggingface.co/spaces/rob-x-ai/glimmer-scope">Live demo</a><a href="https://github.com/kroonen-ai/glimmer-scope">Code</a><a class="pdf" href="glimmer-scope-report.pdf">PDF</a></nav></div>
 <main>
 <header class="title">
   <div class="kicker">Technical report · November 2026</div>
